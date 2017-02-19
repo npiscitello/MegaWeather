@@ -21,8 +21,8 @@ const uint64_t PROGMEM icons[] =
   0x0000007e8181621c,   // partly cloudy
   0x0000007effff7e1c,   // cloudy
   0x8452087effff7e1c,   // precip (rain, sleet, etc.)
-  0x42db245a5a24db42,   // snow
-  0x0e01ff0000ff010e,   // wind
+  0xa524e71818e724a5,   // snow
+  0x7e01060000fc020c,   // wind
   0xaa55aa55aa55aa55,   // fog
 };
 
@@ -32,9 +32,12 @@ const uint64_t PROGMEM icons[] =
 #define P_CLOUD   2
 #define CLOUD     3
 #define PRECIP    4
-#define SNOW_IN   5
+#define SNOW      5
 #define WIND      6
 #define FOG       7
+// Link to the first and last icons
+#define FIRST     0
+#define LAST      7
 
 // update a register on the MAX72XX
 void transmit(const uint8_t reg, const uint8_t val) {
@@ -95,7 +98,7 @@ int main() {
 
   // roll through the defined icons
   while( 1 == 1 ) {
-    for( uint8_t i = 0; i < 8; i++ ) {
+    for( uint8_t i = FIRST; i <= LAST; i++ ) {
       disp_icon(icons, i);
       _delay_ms(1000);
     }
