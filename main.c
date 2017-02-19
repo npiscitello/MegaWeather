@@ -1,0 +1,103 @@
+/* Nick Piscitello
+ * February 2017
+ * Atmel ATMEGA328P-PU
+ * avr-gcc 4.3.3 (WinAVR 20100110)
+ * fuses: default (l: 0x62, h: 0xD9, e: 0x07)
+ * system clock: 8MHz / 8 = 1MHz */
+
+// chip hardware defs, etc.
+#include <avr/io.h>
+// wait for a certain amount of time (for debugging and development)
+#include <util/delay.h>
+// allow constants to be stored in flash instead of SRAM
+#include <avr/pgmspace.h>
+
+// weather icons as noted - some stolen shamelessly from
+// https://electricimp.com/docs/learning/weather/
+const uint64_t PROGMEM icons[] =
+{
+  0x3c4299bdbd99423c,   // clear (sun)
+  0x30180c0e0e0c1830,   // clear (moon)
+  0x0000007e8181621c,   // partly cloudy
+  0x0000007effff7e1c,   // cloudy
+  0x8452087effff7e1c,   // precip (rain, sleet, etc.)
+  0x42db245a5a24db42,   // snow
+  0x0e01ff0000ff010e,   // wind
+  0xaa55aa55aa55aa55,   // fog
+};
+
+// direct links to specific icons (IDK if they'll be useful, but might as well provide them)
+#define SUN       0
+#define MOON      1
+#define P_CLOUD   2
+#define CLOUD     3
+#define PRECIP    4
+#define SNOW_IN   5
+#define WIND      6
+#define FOG       7
+
+// update a register on the MAX72XX
+void transmit(const uint8_t reg, const uint8_t val) {
+  // set CS low
+  PORTB &= 0xFF & !_BV(PORTB2);
+  // what register to write on the MAX7221
+  SPDR = reg;
+  // wait for the transmission to finish
+  while( !(SPSR & _BV(SPIF)) ) {}
+  // what to write into the register on the MAX7221
+  SPDR = val;
+  // wait for the transmission to finish
+  while( !(SPSR & _BV(SPIF)) ) {}
+  // bring CS high
+  PORTB |= 0x00 | _BV(PORTB2);
+}
+
+// update the entire matrix from a 64-bit number
+void update_screen(const uint64_t icon) {
+  // transmit 8 rows at a time. We're taking advantage of the fact that 
+  // the display registers start at 1 on the MAX72XX
+  for( uint8_t i = 0x01; i < 0x09; i++ ) {
+    transmit(i, (icon >> (i - 1) * 8) & 0xFF);
+  }
+}
+
+// write an icon from an array in FLASH to the screen
+void disp_icon(const uint64_t* array, const uint8_t index) {
+  // copy memory from the FLASH array into a RAM var
+  uint64_t ram_icon;
+  memcpy_P(&ram_icon, &icons[index], sizeof(ram_icon));
+  update_screen(ram_icon);
+}
+
+int main() {
+  // turn off everything except the SPI interface
+  PRR = 0xFF & !_BV(PRSPI);
+
+  // set up SPI: master, CLK = system clock / 2
+  // pins: SS = PB2, MOSI = PB3, SCK = PB5
+  DDRB = _BV(DDB2) | _BV(DDB3) | _BV(DDB5);
+  SPCR = _BV(SPE) | _BV(MSTR);
+  SPSR = _BV(SPI2X);
+
+  // set up MAX7219
+  // don't use the decode table for any digit
+  transmit(0x09, 0x00);
+  // set intensity to middle ground
+  transmit(0x0A, 0x08);
+  // scan across all digits
+  transmit(0x0B, 0x07);
+  // clear display
+  for( uint8_t i = 0x01; i <= 0x08; i++ ) {
+    transmit(i, 0x00);
+  }
+  // take the chip out of shutdown mode
+  transmit(0x0C, 0x01);
+
+  // roll through the defined icons
+  while( 1 == 1 ) {
+    for( uint8_t i = 0; i < 8; i++ ) {
+      disp_icon(icons, i);
+      _delay_ms(1000);
+    }
+  }
+}
