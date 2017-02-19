@@ -22,7 +22,7 @@ const uint64_t PROGMEM icons[] =
   0x0000007effff7e1c,   // cloudy
   0x8452087effff7e1c,   // precip (rain, sleet, etc.)
   0xa524e71818e724a5,   // snow
-  0x7e01060000fc020c,   // wind
+  0x7e01e61060fc020c,   // wind
   0xaa55aa55aa55aa55,   // fog
 };
 

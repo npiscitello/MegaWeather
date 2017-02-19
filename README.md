@@ -21,5 +21,5 @@ A simple ATMEGA328 based weather station to display current and future weather s
 ##Notes
 
 * See
-  http://xantorohara.github.io/led-matrix-editor/#3c4299bdbd99423c|30180c0e0e0c1830|0000007e8181621c|0000007effff7e1c|8452087effff7e1c|a524e71818e724a5|7e01060000fc020c|aa55aa55aa55aa55
+  http://xantorohara.github.io/led-matrix-editor/#3c4299bdbd99423c|30180c0e0e0c1830|0000007e8181621c|0000007effff7e1c|8452087effff7e1c|a524e71818e724a5|7e01e61060fc020c|aa55aa55aa55aa55
   for a really cool browser-based tool for 8x8 matrix planning, pre-loaded with the weather icons!
