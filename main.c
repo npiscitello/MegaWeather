@@ -1,7 +1,7 @@
 /* Nick Piscitello
  * February 2017
  * Atmel ATMEGA328P-PU
- * avr-gcc 4.3.3 (WinAVR 20100110)
+ * avr-gcc 6.3.0 (on Arch Linux)
  * fuses: default (l: 0x62, h: 0xD9, e: 0x07)
  * system clock: 8MHz / 8 = 1MHz */
 
