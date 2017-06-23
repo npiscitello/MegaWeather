@@ -1,7 +1,7 @@
 /* Nick Piscitello
- * February 2017
+ * February 2017 (project start)
  * Atmel ATMEGA328P-PU
- * avr-gcc 6.3.0 (on Arch Linux)
+ * avr-gcc 6.3.0 (on Arch Linux) (project start)
  * fuses: default (l: 0x62, h: 0xD9, e: 0x07)
  * system clock: 8MHz / 8 = 1MHz */
 
@@ -14,7 +14,8 @@
 
 // weather icons as noted - some stolen shamelessly from
 // https://electricimp.com/docs/learning/weather/
-const uint64_t PROGMEM icons[] =
+// YCM will complain about this - it uses a GCC feature not implemented in clang
+const __flash uint64_t icons[] =
 {
   0x3c4299bdbd99423c,   // clear (sun)
   0x30180c0e0e0c1830,   // clear (moon)
@@ -36,8 +37,8 @@ const uint64_t PROGMEM icons[] =
 #define WIND      6
 #define FOG       7
 // Link to the first and last icons
-#define FIRST     0
-#define LAST      7
+#define FIRST     SUN
+#define LAST      FOG
 
 // update a register on the MAX72XX
 void transmit(const uint8_t reg, const uint8_t val) {
@@ -64,15 +65,7 @@ void update_screen(const uint64_t icon) {
   }
 }
 
-// write an icon from an array in FLASH to the screen
-void disp_icon(const uint64_t* array, const uint8_t index) {
-  // copy memory from the FLASH array into a RAM var
-  uint64_t ram_icon;
-  memcpy_P(&ram_icon, &icons[index], sizeof(ram_icon));
-  update_screen(ram_icon);
-}
-
-int main() {
+int main(void) {
   // turn off everything except the SPI interface
   PRR = 0xFF & !_BV(PRSPI);
 
@@ -99,7 +92,7 @@ int main() {
   // roll through the defined icons
   while( 1 == 1 ) {
     for( uint8_t i = FIRST; i <= LAST; i++ ) {
-      disp_icon(icons, i);
+      update_screen(icons[i]);
       _delay_ms(1000);
     }
   }
