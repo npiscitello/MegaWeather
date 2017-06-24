@@ -1,4 +1,4 @@
-// <TODO> thinner numbers (AKA overall width = 6 columns vs 8)?
+// <TODO> make the number transition work with 1 and 2 digit numbers too (w/o leading 0)
 
 /* Nick Piscitello
  * February 2017 (project start)
@@ -30,18 +30,18 @@ const __flash uint64_t icons[] =
 };
 
 // YCM will complain about this - it uses a GCC feature not implemented in clang
-const __flash uint64_t digits[] =
+const __flash uint64_t digit[] =
 {
-  0x1c2222222222221c,   // 0
-  0x1c08080808080c08,   // 1
-  0x3e0408102020221c,   // 2
-  0x1c2220201820221c,   // 3
-  0x20203e2224283020,   // 4
-  0x1c2220201e02023e,   // 5
-  0x1c2222221e02221c,   // 6
-  0x040404081020203e,   // 7
-  0x1c2222221c22221c,   // 8
-  0x1c22203c2222221c    // 9
+  0x0e1111111111110e,   // 0
+  0x1f04040404050604,   // 1
+  0x1f0204081010110e,   // 2
+  0x0e1110100c10110e,   // 3
+  0x10101f1112141810,   // 4
+  0x0e1110100f01011f,   // 5
+  0x0e1111110f01110e,   // 6
+  0x020202040810101f,   // 7
+  0x0e1111110e11110e,   // 8
+  0x0e11101e1111110e    // 9
 };
 
 // YCM will complain about this - it uses a GCC feature not implemented in clang
@@ -59,6 +59,9 @@ const __flash uint64_t blank_screen = 0x0000000000000000;
 // Link to the first and last icons
 #define FIRST     SUN
 #define LAST      FOG
+
+// how long to delay between frames in a slide transition
+#define SLIDE_DELAY 100
 
 // update a register on the MAX72XX
 void transmit(const uint8_t reg, const uint8_t val) {
@@ -92,17 +95,70 @@ void update_screen(const uint64_t icon) {
  *  out_icon: old icon to be replaced
  *  in_icon:  new icon to be displayed
  *  space:    number of blank columns between icons */
-void slide_transition(const uint64_t out_icon, const uint64_t in_icon, const uint8_t space) {
+void icon_slide_transition(const uint64_t out_icon, const uint64_t in_icon, const uint8_t space) {
   // index across frames
-  for( uint8_t i = 1; i <= 8 + space; i++ ) {
+  for( uint8_t i = 1; i <= space + 8; i++ ) {
     // modified update_screen - treat the icon like an 8-member uint8_t array
     // the shifts are 'backwards'; this is due to the writes being from bottom to top
     for( uint8_t j = 0x01; j < 0x09; j++ ) {
-      transmit(j, ((((uint8_t*)&out_icon)[j - 1]) >> i) | ((((uint8_t*)&in_icon)[j - 1]) << (8 - i + space)));
+      transmit(j, ((((uint8_t*)&out_icon)[j - 1]) >> i) | ((((uint8_t*)&in_icon)[j - 1]) << (space + 8 - i)));
     }
-    _delay_ms(150);
+    _delay_ms(SLIDE_DELAY);
   }
   return;
+}
+
+/* slide transition to show a number between icons. It will stop on the last number and return the 
+ * index of that digit; this can be used to transition from that digit back to an icon.
+ *  out_icon: icon to be replaced
+ *  number:   number to be displayed. This is passed as an integer that will be parsed.
+ *  space:    number of blank columns between icon and number */
+uint8_t number_slide_transition(const uint64_t out_icon, const uint8_t number, const uint8_t space) {
+  // parse digits in the number into a temp working array
+  uint64_t number_digs[3];
+  number_digs[0] = digit[number / 100];
+  number_digs[1] = digit[(number / 10) % 10];
+  number_digs[2] = digit[number % 10];
+
+  /* we need three for loops because, with just one, the arguments to the left shifts would become
+   * negative. This could probably be mitigated with some macro magic, but I am no magician.
+   * Besides, I find this way clearer. */
+
+  // wipe across the first space + 8 columns (clear icon)
+  uint8_t i, last_i;
+  for( i = 1; i <= space + 8; i++ ) {
+    // modified update_screen - treat the icon like an 8-member uint8_t array
+    // the shifts are 'backwards'; this is due to the writes being from bottom to top
+    for( uint8_t j = 0x01; j < 0x09; j++ ) {
+      transmit(j, ((((uint8_t*)&out_icon)[j - 1]) >> i) | 
+          ((((uint8_t*)&number_digs[0])[j - 1]) << (space + 8 - i)) |
+          ((((uint8_t*)&number_digs[1])[j - 1]) << (space + 8 + 6 - i)));
+    }
+    _delay_ms(SLIDE_DELAY);
+  }
+  last_i = i;
+
+  // wipe across the next 6 columns (clear first digit)
+  for( i++; i <= last_i + 6; i++ ) {
+    for( uint8_t j = 0x01; j < 0x09; j++ ) {
+      transmit(j, ((((uint8_t*)&number_digs[0])[j - 1]) >> (i - last_i)) | 
+          ((((uint8_t*)&number_digs[1])[j - 1]) << (last_i + 6 - i)) |
+          ((((uint8_t*)&number_digs[2])[j - 1]) << (last_i + 6 + 6 - i)));
+    }
+    _delay_ms(SLIDE_DELAY);
+  }
+  last_i = i;
+
+  // wipe across the final 6 columns (clear second digit)
+  for( i++; i <= last_i + 6; i++ ) {
+    for( uint8_t j = 0x01; j < 0x09; j++ ) {
+      transmit(j, ((((uint8_t*)&number_digs[1])[j - 1]) >> (i - last_i)) | 
+          ((((uint8_t*)&number_digs[2])[j - 1]) << (last_i + 6 - i)));
+    }
+    _delay_ms(SLIDE_DELAY);
+  }
+
+  return number % 10;
 }
 
 int main(void) {
@@ -130,20 +186,14 @@ int main(void) {
   transmit(0x0C, 0x01);
 
   // slide the first icon onto the screen
-  slide_transition(blank_screen, icons[FIRST], 0);
+  icon_slide_transition(blank_screen, icons[FIRST], 0);
   _delay_ms(1000);
 
   // roll through the defined icons
+  uint8_t last_digit = 0;
   while( 1 == 1 ) {
-    for( uint8_t i = FIRST; i < LAST; i++ ) {
-      slide_transition(icons[i], icons[i+1], 2);
-    }
+    last_digit = number_slide_transition(icons[FIRST], 25, 3);
+    icon_slide_transition(digit[last_digit], icons[FIRST], 2);
     _delay_ms(2000);
-    slide_transition(icons[LAST], digits[0], 2);
-    for( uint8_t i = 0; i < 9; i++ ) {
-      slide_transition(digits[i], digits[i+1], 0);
-    }
-    _delay_ms(2000);
-    slide_transition(digits[9], icons[FIRST], 2);
   }
 }
