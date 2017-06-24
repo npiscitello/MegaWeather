@@ -1,3 +1,5 @@
+// <TODO> thinner numbers (AKA overall width = 6 columns vs 8)?
+
 /* Nick Piscitello
  * February 2017 (project start)
  * Atmel ATMEGA328P-PU
@@ -24,7 +26,22 @@ const __flash uint64_t icons[] =
   0x8452087effff7e1c,   // precip (rain, sleet, etc.)
   0xa524e71818e724a5,   // snow
   0x7e01e61060fc020c,   // wind
-  0xaa55aa55aa55aa55,   // fog
+  0xaa55aa55aa55aa55    // fog
+};
+
+// YCM will complain about this - it uses a GCC feature not implemented in clang
+const __flash uint64_t digits[] =
+{
+  0x1c2222222222221c,   // 0
+  0x1c08080808080c08,   // 1
+  0x3e0408102020221c,   // 2
+  0x1c2220201820221c,   // 3
+  0x20203e2224283020,   // 4
+  0x1c2220201e02023e,   // 5
+  0x1c2222221e02221c,   // 6
+  0x040404081020203e,   // 7
+  0x1c2222221c22221c,   // 8
+  0x1c22203c2222221c    // 9
 };
 
 // YCM will complain about this - it uses a GCC feature not implemented in clang
@@ -118,13 +135,15 @@ int main(void) {
 
   // roll through the defined icons
   while( 1 == 1 ) {
-    for( uint8_t i = FIRST; i <= LAST; i++ ) {
-      if( i != LAST ) {
-        slide_transition(icons[i], icons[i+1], 2);
-      } else {
-        slide_transition(icons[LAST], icons[FIRST], 2);
-      }
-      _delay_ms(1000);
+    for( uint8_t i = FIRST; i < LAST; i++ ) {
+      slide_transition(icons[i], icons[i+1], 2);
     }
+    _delay_ms(2000);
+    slide_transition(icons[LAST], digits[0], 2);
+    for( uint8_t i = 0; i < 9; i++ ) {
+      slide_transition(digits[i], digits[i+1], 0);
+    }
+    _delay_ms(2000);
+    slide_transition(digits[9], icons[FIRST], 2);
   }
 }
