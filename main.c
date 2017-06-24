@@ -17,7 +17,7 @@
 // weather icons as noted - some stolen shamelessly from
 // https://electricimp.com/docs/learning/weather/
 // YCM will complain about this - it uses a GCC feature not implemented in clang
-const __flash uint64_t icons[] =
+const __flash uint64_t icon[] =
 {
   0x3c4299bdbd99423c,   // clear (sun)
   0x30180c0e0e0c1830,   // clear (moon)
@@ -28,6 +28,19 @@ const __flash uint64_t icons[] =
   0x7e01e61060fc020c,   // wind
   0xaa55aa55aa55aa55    // fog
 };
+
+// direct links to specific icons
+#define SUN       0
+#define MOON      1
+#define P_CLOUD   2
+#define CLOUD     3
+#define PRECIP    4
+#define SNOW      5
+#define WIND      6
+#define FOG       7
+// Link to the first and last icons
+#define FIRST     SUN
+#define LAST      FOG
 
 // YCM will complain about this - it uses a GCC feature not implemented in clang
 const __flash uint64_t digit[] =
@@ -45,23 +58,31 @@ const __flash uint64_t digit[] =
 };
 
 // YCM will complain about this - it uses a GCC feature not implemented in clang
-const __flash uint64_t blank_screen = 0x0000000000000000;
+const __flash uint64_t character[] =
+{
+  0x00180018183c3c18,   // !
+  0x001800183060663c,   // ?
+  0x0000000000000000,   // 
+  0x001800183060663c,   // .
+  0x0000001b1b000000,   // ..
+  0x000000dbdb000000,   // ...
+  0x0000000000000303    // degrees
+};
 
-// direct links to specific icons (IDK if they'll be useful, but might as well provide them)
-#define SUN       0
-#define MOON      1
-#define P_CLOUD   2
-#define CLOUD     3
-#define PRECIP    4
-#define SNOW      5
-#define WIND      6
-#define FOG       7
-// Link to the first and last icons
-#define FIRST     SUN
-#define LAST      FOG
+// direct links to specific characters
+#define EXCLAIM   0
+#define QUESTION  1
+#define BLANK     2
+#define LOAD_0    3
+#define LOAD_1    4
+#define LOAD_2    5
+#define DEGREE    6
 
 // how long to delay between frames in a slide transition
 #define SLIDE_DELAY 100
+// how long to delay between status blinks
+#define SLOW_BLINK 750
+#define FAST_BLINK 100
 
 // update a register on the MAX72XX
 void transmit(const uint8_t reg, const uint8_t val) {
@@ -113,12 +134,22 @@ void icon_slide_transition(const uint64_t out_icon, const uint64_t in_icon, cons
  *  out_icon: icon to be replaced
  *  number:   number to be displayed. This is passed as an integer that will be parsed.
  *  space:    number of blank columns between icon and number */
+// <TODO> find a way to add a degrees sign? Is this even necessary?
 uint8_t number_slide_transition(const uint64_t out_icon, const uint8_t number, const uint8_t space) {
-  // parse digits in the number into a temp working array
+  // parse digits in the number into a temp working array depending on number of digits
   uint64_t number_digs[3];
-  number_digs[0] = digit[number / 100];
-  number_digs[1] = digit[(number / 10) % 10];
-  number_digs[2] = digit[number % 10];
+  if( number > 99 ) {
+    number_digs[0] = digit[number / 100];
+    number_digs[1] = digit[(number / 10) % 10];
+    number_digs[2] = digit[number % 10];
+  } else if ( number > 9 ) {
+    number_digs[0] = digit[(number / 10) % 10];
+    number_digs[1] = digit[number % 10];
+    number_digs[2] = character[BLANK];
+  } else {
+    number_digs[0] = digit[number % 10];
+    number_digs[1] = character[BLANK];
+  }
 
   /* we need three for loops because, with just one, the arguments to the left shifts would become
    * negative. This could probably be mitigated with some macro magic, but I am no magician.
@@ -127,8 +158,6 @@ uint8_t number_slide_transition(const uint64_t out_icon, const uint8_t number, c
   // wipe across the first space + 8 columns (clear icon)
   uint8_t i, last_i;
   for( i = 1; i <= space + 8; i++ ) {
-    // modified update_screen - treat the icon like an 8-member uint8_t array
-    // the shifts are 'backwards'; this is due to the writes being from bottom to top
     for( uint8_t j = 0x01; j < 0x09; j++ ) {
       transmit(j, ((((uint8_t*)&out_icon)[j - 1]) >> i) | 
           ((((uint8_t*)&number_digs[0])[j - 1]) << (space + 8 - i)) |
@@ -138,24 +167,28 @@ uint8_t number_slide_transition(const uint64_t out_icon, const uint8_t number, c
   }
   last_i = i;
 
-  // wipe across the next 6 columns (clear first digit)
-  for( i++; i <= last_i + 6; i++ ) {
-    for( uint8_t j = 0x01; j < 0x09; j++ ) {
-      transmit(j, ((((uint8_t*)&number_digs[0])[j - 1]) >> (i - last_i)) | 
-          ((((uint8_t*)&number_digs[1])[j - 1]) << (last_i + 6 - i)) |
-          ((((uint8_t*)&number_digs[2])[j - 1]) << (last_i + 6 + 6 - i)));
+  if( number > 9 ) {
+    // wipe across the next 6 columns (clear first digit)
+    for( i++; i <= last_i + 6; i++ ) {
+      for( uint8_t j = 0x01; j < 0x09; j++ ) {
+        transmit(j, ((((uint8_t*)&number_digs[0])[j - 1]) >> (i - last_i)) | 
+            ((((uint8_t*)&number_digs[1])[j - 1]) << (last_i + 6 - i)) |
+            ((((uint8_t*)&number_digs[2])[j - 1]) << (last_i + 6 + 6 - i)));
+      }
+      _delay_ms(SLIDE_DELAY);
     }
-    _delay_ms(SLIDE_DELAY);
+    last_i = i;
   }
-  last_i = i;
 
-  // wipe across the final 6 columns (clear second digit)
-  for( i++; i <= last_i + 6; i++ ) {
-    for( uint8_t j = 0x01; j < 0x09; j++ ) {
-      transmit(j, ((((uint8_t*)&number_digs[1])[j - 1]) >> (i - last_i)) | 
-          ((((uint8_t*)&number_digs[2])[j - 1]) << (last_i + 6 - i)));
+  if( number > 99 ) {
+    // wipe across the final 6 columns (clear second digit)
+    for( i++; i <= last_i + 6; i++ ) {
+      for( uint8_t j = 0x01; j < 0x09; j++ ) {
+        transmit(j, ((((uint8_t*)&number_digs[1])[j - 1]) >> (i - last_i)) | 
+            ((((uint8_t*)&number_digs[2])[j - 1]) << (last_i + 6 - i)));
+      }
+      _delay_ms(SLIDE_DELAY);
     }
-    _delay_ms(SLIDE_DELAY);
   }
 
   return number % 10;
@@ -186,14 +219,14 @@ int main(void) {
   transmit(0x0C, 0x01);
 
   // slide the first icon onto the screen
-  icon_slide_transition(blank_screen, icons[FIRST], 0);
+  icon_slide_transition(character[BLANK], icon[FIRST], 0);
   _delay_ms(1000);
 
   // roll through the defined icons
   uint8_t last_digit = 0;
   while( 1 == 1 ) {
-    last_digit = number_slide_transition(icons[FIRST], 25, 3);
-    icon_slide_transition(digit[last_digit], icons[FIRST], 2);
+    last_digit = number_slide_transition(icon[FIRST], 240, 3);
+    icon_slide_transition(digit[last_digit], icon[FIRST], 2);
     _delay_ms(2000);
   }
 }
