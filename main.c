@@ -14,26 +14,25 @@
 // icon sets
 #include "graphics.h"
 
-// bit flags for nonblocking slide animation 
-struct animation_flags {
-  uint8_t slide_start :1;
-  uint8_t slide_done  :1;
-  uint8_t bool2       :1;
-  uint8_t bool3       :1;
-  uint8_t bool4       :1;
-  uint8_t bool5       :1;
-  uint8_t bool6       :1;
-  uint8_t bool7       :1;
-} aflags;
+// data for slide animation
+struct animation_data {
+  uint64_t  out_icon;       // icon to be replaced
+  uint64_t  in_icon[3];     // new icons to be shown (in_icon[0] used if icon_slide == true)
+  uint8_t   number;         // number reflected in in_icon; hopefully, I can find a way to not need this
+  uint8_t   frame;          // current frame of the animation
+  uint8_t   space       :3; // space between icons; for more than 7 columns, use character[BLANK]
+  uint8_t   icon_slide  :1; // true if transitioning between 2 icons, false if displaying a number
+  uint8_t   slide_en    :1; // slide enable flag
+  uint8_t   slide_done  :1; // slide finished flag
+  uint8_t   bool6       :1;
+  uint8_t   bool7       :1;
+} adata;
 // these aren't defined
 #define false 0
 #define true  1
 
-// how long to delay between frames in a slide transition
+// how long to delay between frames in a slide transition, in ms (0-255)
 #define SLIDE_DELAY 100
-// how long to delay between status blinks
-#define SLOW_BLINK 750
-#define FAST_BLINK 100
 
 // update a register on the MAX72XX
 void transmit(const uint8_t reg, const uint8_t val) {
@@ -151,6 +150,83 @@ uint8_t number_slide_transition(const uint64_t out_icon, const uint8_t number, c
   }
 
   return number % 10;
+}
+
+/* slide transition to show a number between icons. It will stop on the last number and return the 
+ * index of that digit; this can be used to transition from that digit back to an icon.
+ *  out_icon: icon to be replaced
+ *  number:   number to be displayed. This is passed as an integer that will be parsed.
+ *  space:    number of blank columns between icon and number (0-7)
+ * 
+ * this is the nonblocking version of the above function */
+// <TODO> degree sign? Is this necessary?
+uint8_t number_slide_transition_async(const uint64_t out_icon, const uint8_t number, const uint8_t space) {
+  adata.icon_slide = false;
+  adata.slide_en = true;
+  adata.out_icon = out_icon;
+  adata.space = space;
+  adata.number = number;
+  // parse digits in the number into the digit frame array
+  if( number > 99 ) {
+    adata.in_icon[0] = digit[number / 100];
+    adata.in_icon[1] = digit[(number / 10) % 10];
+    adata.in_icon[2] = digit[number % 10];
+  } else if ( number > 9 ) {
+    adata.in_icon[0] = digit[(number / 10) % 10];
+    adata.in_icon[1] = digit[number % 10];
+    adata.in_icon[2] = character[BLANK];
+  } else {
+    adata.in_icon[0] = digit[number % 10];
+    adata.in_icon[1] = character[BLANK];
+  }
+  // setup and enable timer - /1024 prescaler on 1MHz gives about 1ms/tick
+  TCCR0A = _BV(WGM01);
+  TCCR0B = _BV(CS02) | _BV(CS00);
+  OCR0A = SLIDE_DELAY;
+
+  // set the timer value to zero before enabling the interrupt to ensure we wait the full period
+  // before triggering the second frame.
+  TCNT0 = 0x00;
+  TIMSK0 = _BV(OCIE0A);
+  return number % 10;
+}
+
+// this does all the work - it is to be called in a loop to generate the animation
+void number_slide_transition_animation_loop(void) {
+  /* we need three for loops because, with just one, the arguments to the left shifts would become
+   * negative. This could probably be mitigated with some macro magic, but I am no magician.
+   * Besides, I find this way clearer. */
+
+  // wipe across the first space + 8 columns (clear icon)
+  if( adata.frame <= adata.space + 8 ) {
+    for( uint8_t j = 0x01; j < 0x09; j++ ) {
+      transmit(j, ((((uint8_t*)&adata.out_icon)[j - 1]) >> adata.frame) | 
+          ((((uint8_t*)&adata.in_icon[0])[j - 1]) << (adata.space + 8 - adata.frame)) |
+          ((((uint8_t*)&adata.in_icon[1])[j - 1]) << (adata.space + 8 + 6 - adata.frame)));
+    }
+  } else if( adata.frame <= adata.space + 8 + 6
+      && adata.frame > adata.space + 8
+      && adata.number > 9) {
+    // wipe across the next 6 columns (clear first digit)
+    for( uint8_t j = 0x01; j < 0x09; j++ ) {
+      transmit(j, ((((uint8_t*)&adata.in_icon[0])[j - 1]) >> adata.frame) | 
+          ((((uint8_t*)&adata.in_icon[1])[j - 1]) << (adata.space + 8 + 6 - adata.frame)) |
+          ((((uint8_t*)&adata.in_icon[2])[j - 1]) << (adata.space + 8 + 6 + 6 - adata.frame)));
+    }
+  } else if( adata.frame <= adata.space + 8 + 6 + 6
+      && adata.frame > adata.space + 8 + 6
+      && adata.number > 99 ) {
+    // wipe across the final 6 columns (clear second digit)
+    for( uint8_t j = 0x01; j < 0x09; j++ ) {
+      transmit(j, ((((uint8_t*)&adata.in_icon[1])[j - 1]) >> (adata.frame)) | 
+          ((((uint8_t*)&adata.in_icon[2])[j - 1]) << (adata.space + 8 + 6 + 6 - adata.frame)));
+    }
+  } else {
+    // this means that all of the digits have scrolled
+    adata.slide_done = true;
+  }
+
+  return;
 }
 
 int main(void) {
