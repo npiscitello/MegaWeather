@@ -65,8 +65,4 @@ const __flash uint64_t character[] =
 #define LOAD_2    5
 #define DEGREE    6
 
-// widths
-#define ICON_W  8
-#define NUM_W   6
-
 #endif
