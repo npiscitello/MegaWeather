@@ -11,19 +11,21 @@
 #include <util/delay.h>
 // allow constants to be stored in flash instead of SRAM
 #include <avr/pgmspace.h>
+// interrupts
+#include <avr/interrupt.h>
 // icon sets
 #include "graphics.h"
 
-// data for slide animation
-struct animation_data {
+// data for slide transition
+struct transition_data {
   uint64_t  out_icon;       // icon to be replaced
   uint64_t  in_icon[3];     // new icons to be shown (in_icon[0] used if icon_slide == true)
   uint8_t   number;         // number reflected in in_icon; hopefully, I can find a way to not need this
-  uint8_t   frame;          // current frame of the animation
+  uint8_t   frame;          // current frame of the transition
   uint8_t   space       :3; // space between icons; for more than 7 columns, use character[BLANK]
-  uint8_t   icon_slide  :1; // true if transitioning between 2 icons, false if displaying a number
-  uint8_t   slide_en    :1; // slide enable flag
-  uint8_t   slide_done  :1; // slide finished flag
+  uint8_t   icon        :1; // true if transitioning between 2 icons, false if displaying a number
+  uint8_t   trans_done    :1; // slide finished flag
+  uint8_t   frame_ready :1; // true if the inter-frame time has elapsed
   uint8_t   bool6       :1;
   uint8_t   bool7       :1;
 } adata;
@@ -73,83 +75,63 @@ void update_screen(const uint64_t icon) {
  * most of that time being _delay_ms(). */
 void icon_slide_transition(const uint64_t out_icon, const uint64_t in_icon, const uint8_t space) {
   // index across frames
-  for( uint8_t i = 1; i <= space + 8; i++ ) {
+  for( uint8_t i = 1; i <= space + ICON_W; i++ ) {
     // modified update_screen - treat the icon like an 8-member uint8_t array
     // the shifts are 'backwards'; this is due to the writes being from bottom to top
     for( uint8_t j = 0x01; j < 0x09; j++ ) {
-      transmit(j, ((((uint8_t*)&out_icon)[j - 1]) >> i) | ((((uint8_t*)&in_icon)[j - 1]) << (space + 8 - i)));
+      transmit(j, ((((uint8_t*)&out_icon)[j - 1]) >> i) | ((((uint8_t*)&in_icon)[j - 1]) << (space + ICON_W - i)));
     }
     _delay_ms(SLIDE_DELAY);
   }
   return;
 }
 
-/* slide transition to show a number between icons. It will stop on the last number and return the 
- * index of that digit; this can be used to transition from that digit back to an icon.
- *  out_icon: icon to be replaced
- *  number:   number to be displayed. This is passed as an integer that will be parsed.
- *  space:    number of blank columns between icon and number
- *
- * I'm re-implementing this as non-blocking; each call turns into almost 3 seconds of execution,
- * most of that time being _delay_ms(). */
-// <TODO> find a way to add a degrees sign? Is this even necessary?
-uint8_t number_slide_transition(const uint64_t out_icon, const uint8_t number, const uint8_t space) {
-  // parse digits in the number into a temp working array depending on number of digits
-  uint64_t number_digs[3];
-  if( number > 99 ) {
-    number_digs[0] = digit[number / 100];
-    number_digs[1] = digit[(number / 10) % 10];
-    number_digs[2] = digit[number % 10];
-  } else if ( number > 9 ) {
-    number_digs[0] = digit[(number / 10) % 10];
-    number_digs[1] = digit[number % 10];
-    number_digs[2] = character[BLANK];
-  } else {
-    number_digs[0] = digit[number % 10];
-    number_digs[1] = character[BLANK];
-  }
-
-  /* we need three for loops because, with just one, the arguments to the left shifts would become
+// this does all the work - it is to be called in a loop to generate the transition
+void transition_loop(void) {
+  /* we need three if statements because, with just one, the arguments to the left shifts would become
    * negative. This could probably be mitigated with some macro magic, but I am no magician.
    * Besides, I find this way clearer. */
 
-  // wipe across the first space + 8 columns (clear icon)
-  uint8_t i, last_i;
-  for( i = 1; i <= space + 8; i++ ) {
-    for( uint8_t j = 0x01; j < 0x09; j++ ) {
-      transmit(j, ((((uint8_t*)&out_icon)[j - 1]) >> i) | 
-          ((((uint8_t*)&number_digs[0])[j - 1]) << (space + 8 - i)) |
-          ((((uint8_t*)&number_digs[1])[j - 1]) << (space + 8 + 6 - i)));
-    }
-    _delay_ms(SLIDE_DELAY);
-  }
-  last_i = i;
-
-  if( number > 9 ) {
-    // wipe across the next 6 columns (clear first digit)
-    for( i++; i <= last_i + 6; i++ ) {
+  // different loops depending on if we're transitioning between icons or a set of numbers.
+  if( adata.icon ) {
+  } else {
+    // wipe across the first space + ICON_W columns (clear icon)
+    if( adata.frame <= adata.space + ICON_W ) {
       for( uint8_t j = 0x01; j < 0x09; j++ ) {
-        transmit(j, ((((uint8_t*)&number_digs[0])[j - 1]) >> (i - last_i)) | 
-            ((((uint8_t*)&number_digs[1])[j - 1]) << (last_i + 6 - i)) |
-            ((((uint8_t*)&number_digs[2])[j - 1]) << (last_i + 6 + 6 - i)));
+        transmit(j, ((((uint8_t*)&adata.out_icon)[j - 1]) >> adata.frame) | 
+            ((((uint8_t*)&adata.in_icon[0])[j - 1]) << (adata.space + ICON_W - adata.frame)) |
+            ((((uint8_t*)&adata.in_icon[1])[j - 1]) << (adata.space + ICON_W + NUM_W - adata.frame)));
       }
-      _delay_ms(SLIDE_DELAY);
-    }
-    last_i = i;
-  }
 
-  if( number > 99 ) {
-    // wipe across the final 6 columns (clear second digit)
-    for( i++; i <= last_i + 6; i++ ) {
+    } else if( adata.frame <= adata.space + ICON_W + NUM_W
+        && adata.frame > adata.space + ICON_W
+        && adata.number > 9) {
+      // wipe across the next NUM_W columns (clear first digit)
       for( uint8_t j = 0x01; j < 0x09; j++ ) {
-        transmit(j, ((((uint8_t*)&number_digs[1])[j - 1]) >> (i - last_i)) | 
-            ((((uint8_t*)&number_digs[2])[j - 1]) << (last_i + 6 - i)));
+        transmit(j, ((((uint8_t*)&adata.in_icon[0])[j - 1]) >> (adata.frame - (adata.space + ICON_W))) | 
+            ((((uint8_t*)&adata.in_icon[1])[j - 1]) << (adata.space + ICON_W + NUM_W - adata.frame)) |
+            ((((uint8_t*)&adata.in_icon[2])[j - 1]) << (adata.space + ICON_W + NUM_W + NUM_W - adata.frame)));
       }
-      _delay_ms(SLIDE_DELAY);
+
+    } else if( adata.frame <= adata.space + ICON_W + NUM_W + NUM_W
+        && adata.frame > adata.space + ICON_W + NUM_W
+        && adata.number > 99 ) {
+      // wipe across the final NUM_W columns (clear second digit)
+      for( uint8_t j = 0x01; j < 0x09; j++ ) {
+        transmit(j, ((((uint8_t*)&adata.in_icon[1])[j - 1]) >> (adata.frame - (adata.space + ICON_W + NUM_W))) | 
+            ((((uint8_t*)&adata.in_icon[2])[j - 1]) << (adata.space + ICON_W + NUM_W + NUM_W - adata.frame)));
+      }
+
+    } else {
+      // this means that all of the digits have scrolled. Disable the timer and clean up
+      TCCR0B &= (0xFF & !_BV(CS02) & !_BV(CS00));
+      adata.trans_done = true;
     }
   }
 
-  return number % 10;
+  TIFR0 |= _BV(OCF0A);
+  adata.frame++;
+  return;
 }
 
 /* slide transition to show a number between icons. It will stop on the last number and return the 
@@ -160,9 +142,8 @@ uint8_t number_slide_transition(const uint64_t out_icon, const uint8_t number, c
  * 
  * this is the nonblocking version of the above function */
 // <TODO> degree sign? Is this necessary?
-uint8_t number_slide_transition_async(const uint64_t out_icon, const uint8_t number, const uint8_t space) {
-  adata.icon_slide = false;
-  adata.slide_en = true;
+uint8_t number_slide_transition(const uint64_t out_icon, const uint8_t number, const uint8_t space) {
+  adata.icon = false;
   adata.out_icon = out_icon;
   adata.space = space;
   adata.number = number;
@@ -179,59 +160,22 @@ uint8_t number_slide_transition_async(const uint64_t out_icon, const uint8_t num
     adata.in_icon[0] = digit[number % 10];
     adata.in_icon[1] = character[BLANK];
   }
-  // setup and enable timer - /1024 prescaler on 1MHz gives about 1ms/tick
-  TCCR0A = _BV(WGM01);
-  TCCR0B = _BV(CS02) | _BV(CS00);
-  OCR0A = SLIDE_DELAY;
 
-  // set the timer value to zero before enabling the interrupt to ensure we wait the full period
-  // before triggering the second frame.
+  // kick off the first frame
+  adata.frame = 1;
+  transition_loop();
+
+  /* set the timer value to zero before starting the clock to ensure we wait the full period
+   * before triggering the second frame. /1024 prescaler on a 1MHz clock give a tick of ~1ms.
+   * Poll the timer overflow flag in TIFR0 to determine when the timer has expired. */
   TCNT0 = 0x00;
-  TIMSK0 = _BV(OCIE0A);
+  TCCR0B |= (_BV(CS02) | _BV(CS00));
   return number % 10;
 }
 
-// this does all the work - it is to be called in a loop to generate the animation
-void number_slide_transition_animation_loop(void) {
-  /* we need three for loops because, with just one, the arguments to the left shifts would become
-   * negative. This could probably be mitigated with some macro magic, but I am no magician.
-   * Besides, I find this way clearer. */
-
-  // wipe across the first space + 8 columns (clear icon)
-  if( adata.frame <= adata.space + 8 ) {
-    for( uint8_t j = 0x01; j < 0x09; j++ ) {
-      transmit(j, ((((uint8_t*)&adata.out_icon)[j - 1]) >> adata.frame) | 
-          ((((uint8_t*)&adata.in_icon[0])[j - 1]) << (adata.space + 8 - adata.frame)) |
-          ((((uint8_t*)&adata.in_icon[1])[j - 1]) << (adata.space + 8 + 6 - adata.frame)));
-    }
-  } else if( adata.frame <= adata.space + 8 + 6
-      && adata.frame > adata.space + 8
-      && adata.number > 9) {
-    // wipe across the next 6 columns (clear first digit)
-    for( uint8_t j = 0x01; j < 0x09; j++ ) {
-      transmit(j, ((((uint8_t*)&adata.in_icon[0])[j - 1]) >> adata.frame) | 
-          ((((uint8_t*)&adata.in_icon[1])[j - 1]) << (adata.space + 8 + 6 - adata.frame)) |
-          ((((uint8_t*)&adata.in_icon[2])[j - 1]) << (adata.space + 8 + 6 + 6 - adata.frame)));
-    }
-  } else if( adata.frame <= adata.space + 8 + 6 + 6
-      && adata.frame > adata.space + 8 + 6
-      && adata.number > 99 ) {
-    // wipe across the final 6 columns (clear second digit)
-    for( uint8_t j = 0x01; j < 0x09; j++ ) {
-      transmit(j, ((((uint8_t*)&adata.in_icon[1])[j - 1]) >> (adata.frame)) | 
-          ((((uint8_t*)&adata.in_icon[2])[j - 1]) << (adata.space + 8 + 6 + 6 - adata.frame)));
-    }
-  } else {
-    // this means that all of the digits have scrolled
-    adata.slide_done = true;
-  }
-
-  return;
-}
-
 int main(void) {
-  // turn off everything except the SPI interface
-  PRR = 0xFF & !_BV(PRSPI);
+  // turn off everything except the SPI interface and timer0
+  PRR = 0xFF & !_BV(PRSPI) & !_BV(PRTIM0);
 
   // set up SPI: master, CLK = system clock / 2
   // pins: SS = PB2, MOSI = PB3, SCK = PB5
@@ -253,14 +197,47 @@ int main(void) {
   // take the chip out of shutdown mode
   transmit(0x0C, 0x01);
 
+  // set up transition timer - disable clock until we need it
+  TCCR0A |= _BV(WGM01);
+  TCCR0B &= (0xFF & !_BV(CS02) & !_BV(CS00));
+  OCR0A = SLIDE_DELAY;
+
   // slide the first icon onto the screen
   icon_slide_transition(character[BLANK], icon[FIRST], 0);
   _delay_ms(1000);
 
-  // roll through the defined icons
   uint8_t last_digit = 0;
   while( 1 == 1 ) {
+    // three digit number
     last_digit = number_slide_transition(icon[FIRST], 240, 3);
+    while( !adata.trans_done ) {
+      if( TIFR0 & _BV(OCF0A) ) {
+        transition_loop();
+      }
+    }
+    adata.trans_done = false;
+    icon_slide_transition(digit[last_digit], icon[PRECIP], 2);
+    _delay_ms(2000);
+
+    // two digit number
+    last_digit = number_slide_transition(icon[PRECIP], 36, 3);
+    while( !adata.trans_done ) {
+      if( TIFR0 & _BV(OCF0A) ) {
+        transition_loop();
+      }
+    }
+    adata.trans_done = false;
+    icon_slide_transition(digit[last_digit], icon[SNOW], 2);
+    _delay_ms(2000);
+
+    // one digit number
+    last_digit = number_slide_transition(icon[SNOW], 9, 3);
+    while( !adata.trans_done ) {
+      if( TIFR0 & _BV(OCF0A) ) {
+        transition_loop();
+      }
+    }
+    adata.trans_done = false;
     icon_slide_transition(digit[last_digit], icon[FIRST], 2);
     _delay_ms(2000);
   }
