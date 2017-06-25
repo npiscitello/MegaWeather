@@ -1,5 +1,3 @@
-// <TODO> make the number transition work with 1 and 2 digit numbers too (w/o leading 0)
-
 /* Nick Piscitello
  * February 2017 (project start)
  * Atmel ATMEGA328P-PU
@@ -13,70 +11,23 @@
 #include <util/delay.h>
 // allow constants to be stored in flash instead of SRAM
 #include <avr/pgmspace.h>
+// icon sets
+#include "graphics.h"
 
-// weather icons as noted - some stolen shamelessly from
-// https://electricimp.com/docs/learning/weather/
-// YCM will complain about this - it uses a GCC feature not implemented in clang
-const __flash uint64_t icon[] =
-{
-  0x3c4299bdbd99423c,   // clear (sun)
-  0x30180c0e0e0c1830,   // clear (moon)
-  0x0000007e8181621c,   // partly cloudy
-  0x0000007effff7e1c,   // cloudy
-  0x8452087effff7e1c,   // precip (rain, sleet, etc.)
-  0xa524e71818e724a5,   // snow
-  0x7e01e61060fc020c,   // wind
-  0xaa55aa55aa55aa55    // fog
-};
-
-// direct links to specific icons
-#define SUN       0
-#define MOON      1
-#define P_CLOUD   2
-#define CLOUD     3
-#define PRECIP    4
-#define SNOW      5
-#define WIND      6
-#define FOG       7
-// Link to the first and last icons
-#define FIRST     SUN
-#define LAST      FOG
-
-// YCM will complain about this - it uses a GCC feature not implemented in clang
-const __flash uint64_t digit[] =
-{
-  0x0e1111111111110e,   // 0
-  0x1f04040404050604,   // 1
-  0x1f0204081010110e,   // 2
-  0x0e1110100c10110e,   // 3
-  0x10101f1112141810,   // 4
-  0x0e1110100f01011f,   // 5
-  0x0e1111110f01110e,   // 6
-  0x020202040810101f,   // 7
-  0x0e1111110e11110e,   // 8
-  0x0e11101e1111110e    // 9
-};
-
-// YCM will complain about this - it uses a GCC feature not implemented in clang
-const __flash uint64_t character[] =
-{
-  0x00180018183c3c18,   // !
-  0x001800183060663c,   // ?
-  0x0000000000000000,   // 
-  0x001800183060663c,   // .
-  0x0000001b1b000000,   // ..
-  0x000000dbdb000000,   // ...
-  0x0000000000000303    // degrees
-};
-
-// direct links to specific characters
-#define EXCLAIM   0
-#define QUESTION  1
-#define BLANK     2
-#define LOAD_0    3
-#define LOAD_1    4
-#define LOAD_2    5
-#define DEGREE    6
+// bit flags for nonblocking slide animation 
+struct animation_flags {
+  uint8_t slide_start :1;
+  uint8_t slide_done  :1;
+  uint8_t bool2       :1;
+  uint8_t bool3       :1;
+  uint8_t bool4       :1;
+  uint8_t bool5       :1;
+  uint8_t bool6       :1;
+  uint8_t bool7       :1;
+} aflags;
+// these aren't defined
+#define false 0
+#define true  1
 
 // how long to delay between frames in a slide transition
 #define SLIDE_DELAY 100
@@ -90,11 +41,13 @@ void transmit(const uint8_t reg, const uint8_t val) {
   PORTB &= 0xFF & !_BV(PORTB2);
   // what register to write on the MAX7221
   SPDR = reg;
-  // wait for the transmission to finish
+  // wait for the transmission to finish (poll the finish flag)
+  // this could be interrupt based but that would be needlessly
+  // complicated and actually slower!
   while( !(SPSR & _BV(SPIF)) ) {}
   // what to write into the register on the MAX7221
   SPDR = val;
-  // wait for the transmission to finish
+  // wait for the transmission to finish (poll the finish flag)
   while( !(SPSR & _BV(SPIF)) ) {}
   // bring CS high
   PORTB |= 0x00 | _BV(PORTB2);
@@ -115,7 +68,10 @@ void update_screen(const uint64_t icon) {
 /* slide transition between icons
  *  out_icon: old icon to be replaced
  *  in_icon:  new icon to be displayed
- *  space:    number of blank columns between icons */
+ *  space:    number of blank columns between icons
+ *
+ * I'm re-implementing this as non-blocking; each call turns into almost 3 seconds of execution,
+ * most of that time being _delay_ms(). */
 void icon_slide_transition(const uint64_t out_icon, const uint64_t in_icon, const uint8_t space) {
   // index across frames
   for( uint8_t i = 1; i <= space + 8; i++ ) {
@@ -133,7 +89,10 @@ void icon_slide_transition(const uint64_t out_icon, const uint64_t in_icon, cons
  * index of that digit; this can be used to transition from that digit back to an icon.
  *  out_icon: icon to be replaced
  *  number:   number to be displayed. This is passed as an integer that will be parsed.
- *  space:    number of blank columns between icon and number */
+ *  space:    number of blank columns between icon and number
+ *
+ * I'm re-implementing this as non-blocking; each call turns into almost 3 seconds of execution,
+ * most of that time being _delay_ms(). */
 // <TODO> find a way to add a degrees sign? Is this even necessary?
 uint8_t number_slide_transition(const uint64_t out_icon, const uint8_t number, const uint8_t space) {
   // parse digits in the number into a temp working array depending on number of digits
