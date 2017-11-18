@@ -1,3 +1,16 @@
+# hackWITus
+
+This is a to-do list of sorts in preparation for the hackathon. This project has officially moved to
+the esp8266 platform.
+
+1. SPI comms (get *something* to display on the matrix)
+2. re-implement icon set
+3. Get Wifi connected and pull dummy data from somewhere (try example.com)
+4. find a weather API (to hit every hour or half hour ish)
+5. sync icons with API; add as needed - get them displaying properly!
+6. display temperature, precip % chance, etc.
+7. animations!
+
 # MegaWeather
 
 A simple ATMEGA328P based weather station to display current and future weather status.
