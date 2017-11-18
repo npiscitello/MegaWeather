@@ -22,36 +22,35 @@ import ycm_core
 # compilation database set (by default, one is not set).
 # CHANGE THIS LIST OF FLAGS. YES, THIS IS THE DROID YOU HAVE BEEN LOOKING FOR.
 flags = [
+# AVR magic macros and stuff
+'-D', '__AVR_ATmega328P__',
+# This is only to prevent errors, the real freq. value is in the makefile
+'-D', 'F_CPU=16000000UL',
+# other compiler directives (stolen from avr Makefile)
+'-g', 'dwarf-2',
+'-O', 's',
+'-funsigned-char',
+'-funsigned-bitfields',
+'-fpack-struct',
+'-fshort-enums',
 '-Wall',
-'-Wextra',
-#'-Werror',
-'-fexceptions',
-'-DNDEBUG',
+'-Wstrict-prototypes',
+# turn off warnings for unknown attributes
+'-Wno-unknown-attributes',
 # THIS IS IMPORTANT! Without a "-std=<something>" flag, clang won't know which
 # language to use when compiling headers. So it will guess. Badly. So C++
 # headers will be compiled as C headers. You don't want that so ALWAYS specify
 # a "-std=<something>".
 # For a C project, you would set this to something like 'c99' instead of
 # 'c++11'.
-'-std=c++11',
+'-std=gnu99',
 # ...and the same thing goes for the magic -x option which specifies the
 # language that the files to be compiled are written in. This is mostly
 # relevant for c++ headers.
 # For a C project, you would set this to 'c' instead of 'c++'.
-'-x', 'c++',
-#'-isystem', '/usr/include',
-#'-isystem', '/usr/local/include',
-# Most of the following (with numbers) will probably have to be updated if clang or gcc
-# gets updated. Run 'echo | clang -v -E -x c++ -' and replace these paths with anything
-# under the '#include <...> search starts here:' headings. You'll probably only have to
-# change the numbers.
-#'-isystem', '/usr/lib/clang/3.9.0/include',
-#'-isystem', '/usr/include/c++/6.2.1',
-#'-isystem', '/usr/include/c++/6.2.1/x86_64-pc-linux-gnu',
-#'-isystem', '/usr/include/c++/6.2.1/backward',
-#'-isystem', '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../lib/c++/v1',
-#'-isystem', '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include',
-'-isystem', '/home/npiscitello/custom_build/esp-open-sdk/xtensa-lx106-elf/xtensa-lx106-elf/sysroot/usr/include/'
+'-x', 'c',
+# AVR Include files
+'-isystem', '/usr/avr/include'
 ]
 
 
