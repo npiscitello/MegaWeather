@@ -2,6 +2,11 @@
 #include "osapi.h"
 #include "gpio.h"
 #include "os_type.h"
+#include "driver/uart.h"
+
+// actually store the functions in flash!
+// this has to be defined at compile time: -DICACHE_FLASH
+//#define ICACHE_FLASH
 
 
 /*
@@ -31,20 +36,35 @@ GPIO15: PERIPHS_IO_MUX_MTDO_U
 #define LEDPER 250
 #define LEDON 50
 
+// prints to uart every second
+#define UARTPER 1000
+
+// UART baud rate
+#define BAUD BIT_RATE_115200
+
 static volatile os_timer_t on_timer;
 static volatile os_timer_t off_timer;
+static volatile os_timer_t uart_timer;
 
-void ICACHE_FLASH_ATTR led_off(void *arg) {
+uint8_t uart_text[] = "hello, world!\n";
+const uint16_t uart_len = 15;
+
+void ICACHE_FLASH_ATTR led_off( void *arg ) {
   gpio_output_set(GPIO, 0, 0, 0);
   os_timer_disarm(&off_timer);
 }
 
-void ICACHE_FLASH_ATTR led_on(void *arg) {
+void ICACHE_FLASH_ATTR led_on( void *arg ) {
   gpio_output_set(0, GPIO, 0, 0);
   os_timer_arm(&off_timer, LEDON, 1);
 }
 
-/*
+void ICACHE_FLASH_ATTR uart_print( void *arg ) {
+  uart0_tx_buffer(uart_text, uart_len);
+  //os_printf("Hello, world!");
+}
+
+/* function to run one-shot: USE TIMERS NOT LOOPS
 os_event_t    user_procTaskQueue[1];
 void ICACHE_FLASH_ATTR loop(os_event_t *events) {
   gpio_output_set(0,GPIO,0,0);
@@ -57,6 +77,19 @@ void ICACHE_FLASH_ATTR loop(os_event_t *events) {
 
 void ICACHE_FLASH_ATTR user_init()
 {
+
+  // init debug out subsystem
+  // couldn't find function macros in the docs - oh well. Set them up as UART.
+  PIN_FUNC_SELECT(PERIPHS_IO_MUX_U0TXD_U, 1);
+  PIN_FUNC_SELECT(PERIPHS_IO_MUX_U0TXD_U, 1);
+
+  // baud rates
+  uart_init(BAUD, BAUD);
+
+  // setup UART timers
+  os_timer_setfn(&uart_timer, (os_timer_func_t *)uart_print, NULL);
+  os_timer_arm(&uart_timer, UARTPER, 1);
+
   // init gpio subsytem
   gpio_init();
 
@@ -64,13 +97,14 @@ void ICACHE_FLASH_ATTR user_init()
   PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO5_U, FUNC_GPIO5);
   gpio_output_set(0, 0, GPIO, 0);
   gpio_output_set(GPIO, 0, 0, 0);
+  gpio_output_set(0, GPIO, 0, 0);
 
-  // setup timers
+  // setup LED timers
   os_timer_setfn(&on_timer, (os_timer_func_t *)led_on, NULL);
   os_timer_setfn(&off_timer, (os_timer_func_t *)led_off, NULL);
   os_timer_arm(&on_timer, LEDPER, 1);
 
+  // one-shot run a function (defined above) (USE TIMERS, NOT LOOPS)
   //system_os_task(loop, 0, user_procTaskQueue, 1);
-
   //system_os_post(0, 0, 0 );
 }
