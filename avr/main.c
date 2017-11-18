@@ -45,7 +45,7 @@ int main(void) {
   SPCR = _BV(SPE) | _BV(MSTR);
   SPSR = _BV(SPI2X);
 
-  // set up MAX7219
+  // set up MAX7219 - transmit(addr, data)
   // don't use the decode table for any digit
   transmit(0x09, 0x00);
   // set intensity to middle ground

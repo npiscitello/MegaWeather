@@ -10,3 +10,4 @@
 *.sym
 .dep/
 *.bin
+*_compiled
