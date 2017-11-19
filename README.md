@@ -4,7 +4,7 @@ This is a to-do list of sorts in preparation for the hackathon. This project has
 the esp8266 platform.
 
 0. ~~get some kind of debugging output console over usb?~~
-1. ~~SPI comms (get *something* to display on the matrix)~~
+1. SPI comms (get *something* to display on the matrix)
 2. re-implement icon set
 3. Get Wifi connected and pull dummy data from somewhere (try example.com)
 4. find a weather API (to hit every hour or half hour ish)
