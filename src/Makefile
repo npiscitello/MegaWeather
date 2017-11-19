@@ -1,19 +1,19 @@
 CC 				:= 	xtensa-lx106-elf-gcc
 CFLAGS 		:= 	-I. \
-							-I../lib/ESP8266_SPI_Driver/include \
-							-mlongcalls \
 							-DICACHE_FLASH \
+							-mlongcalls \
 							-std=c99 \
 							-Wno-implicit-function-declaration
+							#-I../lib/ESP8266_SPI_Driver/include
 
-LDLIBS 		:= 	-nostdlib -Wl,--start-group -lmain -lnet80211 -lwpa -llwip -lpp -lphy -lc -Wl,--end-group -lgcc -ldriver
+LDLIBS 		:= 	-nostdlib -Wl,--start-group -lmain -lnet80211 -lwpa -llwip -lpp -lphy -ldriver -lc -Wl,--end-group -lgcc
 LDFLAGS 	:= 	-Teagle.app.v6.ld
 
 MAIN 			:= 	main
 MAIN			:=	$(MAIN)_compiled
 
-CSRCS 		:= 	main.c \
-							../lib/ESP8266_SPI_Driver/driver/spi.c
+CSRCS 		:= 	main.c
+							#../lib/ESP8266_SPI_Driver/driver/spi.c
 
 OBJS 			:= 	$(patsubst %.c, %.o, $(notdir $(CSRCS)))
 
