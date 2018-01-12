@@ -18,17 +18,20 @@
 // in main.c, we start up to a blank screen
 uint64_t cur_screen = 0;
 
-// persistent animation info - this needs to be a single global variable to allow the mutex to work
+// serves as kind of a janky mutex to lock screen writing
+uint8_t screen_lock = 0;
+
 struct transition_data {
   uint64_t in_icon;         // new icon to be shown
-  uint8_t frame;            // current frame of transition
+  uint8_t frame_no;         // current frame of transition
   uint8_t space         :3; // cols of space between icons; for more than 7, use character[BLANK]
-  uint8_t transitioning :1; // the screen is currently mid-transition; kind of a janky mutex
+  uint8_t bool3         :1; 
   uint8_t bool4         :1;
   uint8_t bool5         :1;
   uint8_t bool6         :1;
   uint8_t bool7         :1;
-} tdata;
+};
+typedef struct transition_data transition_data;
 
 // the timer to drive a transition
 static volatile os_timer_t trans_timer;
@@ -38,8 +41,8 @@ static volatile os_timer_t trans_timer;
 // transmit a register/data pair
 #define spi_transmit(ADDR, DATA) spi_transaction(HSPI, 0, 0, 8, ADDR, 8, DATA, 0, 0);
 
-// update the whole screen instantly
-void update_screen( uint64_t image ) {
+// update the whole screen in one shot
+void ICACHE_FLASH_ATTR update_screen( uint64_t image ) {
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
     spi_transmit(i, (uint8_t)(image >> ((i - 1) * 8)));
   }
@@ -50,8 +53,29 @@ void update_screen( uint64_t image ) {
 
 // this is the actual animation "loop", which is really just a nonblocking timer function
 // <TODO>: account for variable width icons (e.g. numbers)
-void transition_loop( void* arg ) {
-  (void)arg;
+void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
+  transition_data *tdata = (transition_data *)tdata_raw;
+  (tdata->frame_no)++;
+  // Generate the next frame then push it to the display in one shot.
+  // This takes more time and memory, but it allows us to keep the cur_screen var updated.
+  // That will allow us, in the future, to cancel animations, interrupt with new animations, and
+  // other cool stuff like that.
+  // Basically, I'm striving for screen state changes to be as atomic as possible, in that the state
+  // is always known internally so the user doesn't have to worry about interrupting operations.
+  if( tdata->frame_no <= tdata->space + ICON_W ) {
+    uint64_t next_frame;
+    for( uint8_t i = 0; i < 8; i++ ) {
+      // treat the 64 bit numbers like an 8 member uint8_t array
+      ((uint8_t*)next_frame)[i] = 
+        ((uint8_t*)cur_screen)[i] << tdata->frame_no |
+        ((uint8_t*)tdata->in_icon)[i] >> (ICON_W + tdata->space - tdata->frame_no);
+    }
+    update_screen(next_frame);
+  } else {
+    // we're done! disable the timer and free the memory we used for the tdata struct
+    os_timer_disarm(&trans_timer);
+    free(tdata);
+  }
 }
 
 
@@ -61,17 +85,22 @@ void transition_loop( void* arg ) {
  * space: the number of blank columns between the current and new icons
  * delay: the frame period, in ms (this value determines how often the timer triggers)
  */
-uint8_t transition( uint64_t icon, uint8_t space, uint16_t delay ) {
-  if( !tdata.transitioning ) {
-    tdata.in_icon = icon;
-    tdata.space = space;
+uint8_t ICACHE_FLASH_ATTR transition( uint64_t icon, uint8_t space, uint16_t delay ) {
+  if( !screen_lock ) {
+    // make sure to free this memory before you start another transition!
+    // there's probably a better way to do this, but I don't want to use a global var because I
+    // don't want the struct to be able to be changed mid-transition
+    // I forgot - no malloc without an OS!
+    transition_data *tdata = malloc(sizeof(transition_data));
+    tdata->in_icon = icon;
+    tdata->space = space;
 
-    tdata.frame = 0;
+    tdata->frame_no = 0;
 
-    os_timer_setfn(&transition_loop, (os_timer_func_t *)transition_loop, (void*)&tdata);
+    os_timer_setfn(&transition_loop, (os_timer_func_t *)transition_loop, (void*)tdata);
     os_timer_arm(&transition_loop, delay, 1);
 
-    tdata.transitioning = true;
+    screen_lock = true;
 
     return 0;
   } else {
