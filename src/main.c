@@ -12,7 +12,8 @@ uint8_t counter = 0x00;
 
 void ICACHE_FLASH_ATTR disp_image(void *arg) {
   (void)arg;
-  update_screen(icon[counter]);
+  //update_screen(icon[counter]);
+  transition(icon[counter], 2, 100);
   
   if( counter++ == LAST_ICON ) {
     counter = FIRST_ICON;

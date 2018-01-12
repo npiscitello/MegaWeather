@@ -3,6 +3,7 @@
 
 #include "osapi.h"
 #include "driver/spi.h"
+#include "mem.h"
 
 // these make more sense in the graphics header but they're only used by animation functions and I
 // don't want to make this file dependent on the graphics header
@@ -30,7 +31,7 @@ struct transition_data {
   uint8_t bool5         :1;
   uint8_t bool6         :1;
   uint8_t bool7         :1;
-};
+} tdata;
 typedef struct transition_data transition_data;
 
 // the timer to drive a transition
@@ -54,27 +55,27 @@ void ICACHE_FLASH_ATTR update_screen( uint64_t image ) {
 // this is the actual animation "loop", which is really just a nonblocking timer function
 // <TODO>: account for variable width icons (e.g. numbers)
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
-  transition_data *tdata = (transition_data *)tdata_raw;
-  (tdata->frame_no)++;
+  transition_data *data = (transition_data *)tdata_raw;
+  (data->frame_no)++;
   // Generate the next frame then push it to the display in one shot.
   // This takes more time and memory, but it allows us to keep the cur_screen var updated.
   // That will allow us, in the future, to cancel animations, interrupt with new animations, and
   // other cool stuff like that.
   // Basically, I'm striving for screen state changes to be as atomic as possible, in that the state
   // is always known internally so the user doesn't have to worry about interrupting operations.
-  if( tdata->frame_no <= tdata->space + ICON_W ) {
+  if( data->frame_no <= data->space + ICON_W ) {
     uint64_t next_frame;
     for( uint8_t i = 0; i < 8; i++ ) {
       // treat the 64 bit numbers like an 8 member uint8_t array
-      ((uint8_t*)next_frame)[i] = 
-        ((uint8_t*)cur_screen)[i] << tdata->frame_no |
-        ((uint8_t*)tdata->in_icon)[i] >> (ICON_W + tdata->space - tdata->frame_no);
+      ((uint8_t*)&next_frame)[i] = 
+        ((uint8_t*)&cur_screen)[i] >> 1 |
+        ((uint8_t*)&data->in_icon)[i] << (ICON_W + data->space - data->frame_no);
     }
     update_screen(next_frame);
   } else {
     // we're done! disable the timer and free the memory we used for the tdata struct
     os_timer_disarm(&trans_timer);
-    free(tdata);
+    screen_lock = false;
   }
 }
 
@@ -87,18 +88,13 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
  */
 uint8_t ICACHE_FLASH_ATTR transition( uint64_t icon, uint8_t space, uint16_t delay ) {
   if( !screen_lock ) {
-    // make sure to free this memory before you start another transition!
-    // there's probably a better way to do this, but I don't want to use a global var because I
-    // don't want the struct to be able to be changed mid-transition
-    // I forgot - no malloc without an OS!
-    transition_data *tdata = malloc(sizeof(transition_data));
-    tdata->in_icon = icon;
-    tdata->space = space;
+    tdata.in_icon = icon;
+    tdata.space = space;
 
-    tdata->frame_no = 0;
+    tdata.frame_no = 0;
 
-    os_timer_setfn(&transition_loop, (os_timer_func_t *)transition_loop, (void*)tdata);
-    os_timer_arm(&transition_loop, delay, 1);
+    os_timer_setfn(&trans_timer, (os_timer_func_t *)transition_loop, (void*)&tdata);
+    os_timer_arm(&trans_timer, delay, 1);
 
     screen_lock = true;
 
