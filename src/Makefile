@@ -30,7 +30,7 @@ $(OBJS): $(CSRCS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $^
 
 # flashing probs? try a lower baudrate, like 921600, 460800, 230400, or remove the arg alltogether
-flash: $(BIN)
+flash: $(MAIN)-0x00000.bin
 	esptool.py -b 1500000 write_flash 0 $(MAIN)-0x00000.bin 0x10000 $(MAIN)-0x10000.bin
 
 clean:
