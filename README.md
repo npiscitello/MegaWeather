@@ -70,3 +70,5 @@ command in the Makefile accordingly.
     * R1 = DP, R2 = A, R3 = B, R4 = C, R5 = D, R6 = E, R7 = F, R8 = G
     * C1 = D0, C2 = D1, C3 = D2, C4 = D3, C5 = D4, C6 = D5, C7 = D6, C8 = D7
 
+* Looking for simple example code for the ESP8266? Check out my [other
+  repo](https://github.com/npiscitello/esp8266_resources).
