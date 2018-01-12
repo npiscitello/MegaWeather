@@ -33,25 +33,22 @@ flags = [
 # a "-std=<something>".
 # For a C project, you would set this to something like 'c99' instead of
 # 'c++11'.
-'-std=c++11',
+'-std=c99',
+'-Wno-implicit-function-declaration',
 # ...and the same thing goes for the magic -x option which specifies the
 # language that the files to be compiled are written in. This is mostly
 # relevant for c++ headers.
 # For a C project, you would set this to 'c' instead of 'c++'.
-'-x', 'c++',
+'-x', 'c',
 #'-isystem', '/usr/include',
 #'-isystem', '/usr/local/include',
 # Most of the following (with numbers) will probably have to be updated if clang or gcc
 # gets updated. Run 'echo | clang -v -E -x c++ -' and replace these paths with anything
 # under the '#include <...> search starts here:' headings. You'll probably only have to
 # change the numbers.
-#'-isystem', '/usr/lib/clang/3.9.0/include',
-#'-isystem', '/usr/include/c++/6.2.1',
-#'-isystem', '/usr/include/c++/6.2.1/x86_64-pc-linux-gnu',
-#'-isystem', '/usr/include/c++/6.2.1/backward',
-#'-isystem', '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../lib/c++/v1',
-#'-isystem', '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include',
-'-isystem', '/home/npiscitello/custom_build/esp-open-sdk/xtensa-lx106-elf/xtensa-lx106-elf/sysroot/usr/include/'
+'-isystem', '.',
+'-isystem', '/home/npiscitello/custom_build/esp-open-sdk/ESP8266_NONOS_SDK_V2.0.0_16_08_10/include',
+'-isystem', '../lib/ESP8266_SPI_Driver/include'
 ]
 
 
