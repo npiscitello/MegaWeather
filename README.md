@@ -53,3 +53,12 @@ command in the Makefile accordingly.
 
 * This will probably not be ATMEGA328P based forever; I'm looking at the ESP8266 as a (tiny!)
   single-chip solution
+
+* Pin mapping: since the LED cathodes in the TC15-11EWA that I'm using are on the columns, and the
+  MAX72XX chips are common cathode drivers, we write the display in columns instead of the more
+  usual rows (AKA, we can specify the state of the 8 individual LEDs in a single column with one
+  write). The matrix generator mentioned above generates row oriented data. By reversing the order of
+  the rows and turning the matrix 90 degrees, we can make it work like a row oriented display.
+    * R1 = DP, R2 = A, R3 = B, R4 = C, R5 = D, R6 = E, R7 = F, R8 = G
+    * C1 = D0, C2 = D1, C3 = D2, C4 = D3, C5 = D4, C6 = D5, C7 = D6, C8 = D7
+

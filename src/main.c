@@ -8,29 +8,19 @@
 
 // blink timers
 static volatile os_timer_t trans_timer;
-#define PERIOD 250
+#define PERIOD 2000
 
-uint8_t counter = 0x01;
-uint8_t flip = 0;
+uint8_t counter = 0x00;
 
 void ICACHE_FLASH_ATTR disp_image(void *arg) {
   (void)arg;
-  for( counter = 0x01; counter <= 0x08; counter++ ) {
-    if( counter % 2 == 0 ) {
-      if( flip == 0 ) {
-        spi_transmit(counter, 0xaa);
-      } else {
-        spi_transmit(counter, 0x55);
-      }
-    } else {
-      if( flip == 0 ) {
-        spi_transmit(counter, 0x55);
-      } else {
-        spi_transmit(counter, 0xaa);
-      }
-    }
+  for( uint8_t i = 0x01; i <= 0x08; i++ ) {
+    spi_transmit(i, (uint8_t)(icon[counter] >> ((i - 1) * 8)));
   }
-  flip = ~flip;
+  
+  if( counter++ == LAST ) {
+    counter = FIRST;
+  }
 }
 
 void ICACHE_FLASH_ATTR user_init()
