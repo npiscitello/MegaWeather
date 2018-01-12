@@ -27,8 +27,8 @@ const uint64_t ICACHE_RODATA_ATTR icon[] =
 #define WIND      6
 #define FOG       7
 // Link to the first and last icons
-#define FIRST     SUN
-#define LAST      FOG
+#define FIRST_ICON     SUN
+#define LAST_ICON      FOG
 
 const uint64_t ICACHE_RODATA_ATTR digit[] =
 {

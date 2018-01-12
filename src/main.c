@@ -1,25 +1,21 @@
 #include "ets_sys.h"
 #include "osapi.h"
-#include "driver/spi.h"
 #include "graphics.h"
+#include "animation.h"
 
-// transmit a register/data pair
-#define spi_transmit(ADDR, DATA) spi_transaction(HSPI, 0, 0, 8, ADDR, 8, DATA, 0, 0);
 
 // blink timers
-static volatile os_timer_t trans_timer;
+static volatile os_timer_t change_timer;
 #define PERIOD 2000
 
 uint8_t counter = 0x00;
 
 void ICACHE_FLASH_ATTR disp_image(void *arg) {
   (void)arg;
-  for( uint8_t i = 0x01; i <= 0x08; i++ ) {
-    spi_transmit(i, (uint8_t)(icon[counter] >> ((i - 1) * 8)));
-  }
+  update_screen(icon[counter]);
   
-  if( counter++ == LAST ) {
-    counter = FIRST;
+  if( counter++ == LAST_ICON ) {
+    counter = FIRST_ICON;
   }
 }
 
@@ -46,7 +42,7 @@ void ICACHE_FLASH_ATTR user_init()
   spi_transmit(0x0C, 0x01);
 
   // setup timers
-  os_timer_setfn(&trans_timer, (os_timer_func_t *)disp_image, NULL);
-  os_timer_arm(&trans_timer, PERIOD, 1);
+  os_timer_setfn(&change_timer, (os_timer_func_t *)disp_image, NULL);
+  os_timer_arm(&change_timer, PERIOD, 1);
 
 }
