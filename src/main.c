@@ -6,17 +6,23 @@
 
 // blink timers
 static volatile os_timer_t change_timer;
-#define PERIOD 2000
+#define PERIOD 500
 
 uint8_t counter = 0x00;
 
 void ICACHE_FLASH_ATTR disp_image(void *arg) {
   (void)arg;
-  //update_screen(icon[counter]);
-  transition(icon[counter], 2, 100);
-  
-  if( counter++ == LAST_ICON ) {
-    counter = FIRST_ICON;
+  if( !transition_running() ) {
+
+    if( counter <= 9 ) {
+      transition(digit[counter], NUM_W, 1, 100);
+    } else {
+      transition(icon[FOG], 8, 1, 100);
+    }
+    
+    if( counter++ == 10 ) {
+      counter = FIRST_ICON;
+    }
   }
 }
 
