@@ -22,18 +22,16 @@ icon_t cur_screen = {0, 8};
 // these are necessary - without checking if there's already a transition going, if a transition is
 // called for while there's already one going, it will freeze. I don't know why yet, that's worth
 // more investigation - it's quite possible it's avoidable without these.
-/*
 struct mutex {
   volatile uint8_t screen        :1; // true when the screen is being actively written
   volatile uint8_t transition    :1; // true when there's a transition in progress
-  volatile uint8_t mutex2        :1; 
+  volatile uint8_t queue         :1; // true when the queue is executing
   volatile uint8_t mutex3        :1; 
   volatile uint8_t mutex4        :1;
   volatile uint8_t mutex5        :1;
   volatile uint8_t mutex6        :1;
   volatile uint8_t mutex7        :1;
 } mutex;
-*/
 
 // Does this need to be in a struct? Probably not, but it feels cleaner - I hate standalone globals.
 // I mean, I hate globals in general, so...
@@ -75,12 +73,14 @@ void ICACHE_FLASH_ATTR clear_queue() {
 
 
 
-// I need to declare this function to be able to use it
+// I need to declare these functions to be able to use it
 void transition_loop( void* tdata_raw );
+void update_screen( const icon_t image );
 // execute queued transitions and clear the queue
 void ICACHE_FLASH_ATTR queue_helper() {
 
-  // clean up after the last run
+  // clean up after the previous run; having these here instead of in transition_loop allows us to
+  // interrupt queue executions with other queue executions
   os_timer_disarm( &trans_timer );
   frame = 0;
 
@@ -95,7 +95,9 @@ void ICACHE_FLASH_ATTR queue_helper() {
     queue.current_index++;
 
   } else {
+    // we're done with the queue
     clear_queue();
+    mutex.queue = false;
   }
 
   return;
@@ -105,7 +107,14 @@ void ICACHE_FLASH_ATTR queue_helper() {
 
 void ICACHE_FLASH_ATTR execute_queue() {
   queue.current_index = 0;
+  mutex.queue = true;
   queue_helper();
+}
+
+
+
+uint8_t ICACHE_FLASH_ATTR queue_executing() {
+  return mutex.queue;
 }
 
 
@@ -170,6 +179,14 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
   transition_t *data = (transition_t *)tdata_raw;
   frame++;
+
+  // skip to the last frame if requested, artifically shifting cur_screen appropriately
+  if( data->instant == true && frame <= data->space + data->icon.width ) {
+    frame = data->space + data->icon.width;
+    for( uint8_t i = 0; i < SCREEN_HEIGHT; i++ ) {
+      ((uint8_t*)&cur_screen)[i] = ((uint8_t*)&cur_screen)[i] >> (data->space + data->icon.width - 1);
+    }
+  }
 
   // Generate the next frame then push it to the display in one shot.
   // This takes more time and memory, but it allows us to keep the cur_screen var updated.

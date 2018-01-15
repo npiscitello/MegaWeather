@@ -72,3 +72,7 @@ command in the Makefile accordingly.
 
 * Looking for simple example code for the ESP8266? Check out my [other
   repo](https://github.com/npiscitello/esp8266_resources).
+
+* TODO:
+  * Should users be able to add to the queue while its executing? Should they be able to clear it?
+    Clearing the queue during execution serves effectively as cancelling the execution...
