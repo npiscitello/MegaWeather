@@ -8,20 +8,20 @@
 static volatile os_timer_t change_timer;
 #define PERIOD 500
 
-uint8_t counter = 0x00;
+uint8_t counter = 0;
 
 void ICACHE_FLASH_ATTR disp_image(void *arg) {
   (void)arg;
-  if( !transition_running() ) {
 
+  if( !transition_running() ) {
     if( counter <= 9 ) {
-      transition(digit[counter], 1, 50);
+      transition(digit[counter], 1, 100);
     } else {
-      transition(icon[FOG], 1, 50);
+      transition(icon[FOG], 1, 100);
     }
     
     if( counter++ == 10 ) {
-      counter = FIRST_ICON;
+      counter = 0;
     }
   }
 }

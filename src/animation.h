@@ -21,6 +21,10 @@
 icon_t cur_screen = {0, 8};
 
 // serves as janky mutexes
+// these are necessary - without checking if there's already a transition going, if a transition is
+// called for while there's already one going, it will freeze. I don't know why yet, that's worth
+// more investigation - it's quite possible it's avoidable without these.
+// It would be interesting to implement some kind of queueing system...
 struct mutex {
   volatile uint8_t screen        :1; // true when the screen is being actively written
   volatile uint8_t transition    :1; // true when there's a transition in progress
@@ -54,15 +58,14 @@ static volatile os_timer_t trans_timer;
 #define spi_transmit(ADDR, DATA) spi_transaction(HSPI, 0, 0, 8, ADDR, 8, DATA, 0, 0);
 
 // update the whole screen in one shot
+// I'm not worrying about mutex locking...yet. I'll figure something out if it becomes a problem.
 void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
-  mutex.screen = true;
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
     // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
     // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
     spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
   }
   cur_screen = image;
-  mutex.screen = false;
 }
 
 
@@ -131,7 +134,6 @@ uint8_t ICACHE_FLASH_ATTR transition(
 
 
 
-// <TODO> create an API call to fluidly display an arbitrary length string of characters
 /* apply a nonstop slide for an arbitrary number of icons of arbitrary widths, like a ticker
  * icon_arr: array of icon structs in the order they will be pushed to the screen
  * num_icons: the number of items in icon_arr
@@ -140,6 +142,7 @@ uint8_t ICACHE_FLASH_ATTR transition(
  *
  * returns: true if the transition was started, false if not
  */
+// <TODO>: blocking? Is there a way to callback?
 uint8_t ICACHE_FLASH_ATTR transition_multiple(
     uint64_t* icon_arr,
     uint8_t num_icons,
