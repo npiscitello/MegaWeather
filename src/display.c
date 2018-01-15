@@ -39,7 +39,8 @@ struct mutex {
 // I mean, I hate globals in general, so...
 struct transition_queue {
   transition_data_t transitions[MAX_QUEUE_LENGTH];  // the actual queue storage
-  uint8_t queue_length;                               // how many items are currently in the queue
+  uint8_t length;                                   // how many items are currently in the queue
+  uint8_t current_index;                            // which item we're executing
 } queue;
 
 // the timer to drive a transition
@@ -52,29 +53,13 @@ uint8_t frame = 0;
 
 // add a transition to the queue if there's space
 uint8_t ICACHE_FLASH_ATTR add_to_queue( transition_data_t* item ) {
-  if( queue.queue_length < MAX_QUEUE_LENGTH ) {
-    // might have to screw with the pointer arithmetic on the dest argument...
-    // increment the queue index and copy the passed struct to the end of the queue
-    os_memcpy(&queue.transitions + (++queue.queue_length - 1), item, sizeof(transition_data_t));
+  if( queue.length < MAX_QUEUE_LENGTH ) {
+    os_memcpy(&queue.transitions + (queue.length), item, sizeof(transition_data_t));
+    queue.length++;
+    return true;
+  } else {
+    return false;
   }
-  return false;
-}
-
-
-// I need to declare this function to be able to use it in execute_queue
-void transition_loop( void* tdata_raw );
-// execute all queued transitions and clear the queue
-uint8_t ICACHE_FLASH_ATTR execute_queue() {
-
-  // will involve some form of these...
-
-  // as a proof of concept, just execute the first queued transition
-  os_timer_setfn(&trans_timer, (os_timer_func_t *)transition_loop, (void*)&(queue.transitions[0]));
-  os_timer_arm(&trans_timer, queue.transitions[0].frame_delay, 1);
-
-  queue.queue_length = 0;
-
-  return 0;
 }
 
 
@@ -82,8 +67,29 @@ uint8_t ICACHE_FLASH_ATTR execute_queue() {
 // reset the queue without executing any queued transitions
 void ICACHE_FLASH_ATTR clear_queue() {
   // we don't really need to worry about actually clearing the memory - it will get overwritten if
-  // it need to
-  queue.queue_length = 0;
+  // it needs to be
+  queue.current_index = 0;
+  queue.length = 0;
+  return;
+}
+
+
+
+// I need to declare this function to be able to use it
+void transition_loop( void* tdata_raw );
+// execute queued transitions and clear the queue
+void ICACHE_FLASH_ATTR execute_queue() {
+
+  if( queue.current_index < queue.length ) {
+    os_timer_setfn(&trans_timer, (os_timer_func_t *)transition_loop, 
+        (void*)&(queue.transitions[queue.current_index]));
+    os_timer_arm(&trans_timer, queue.transitions[queue.current_index].frame_delay, 1);
+    queue.current_index++;
+
+  } else {
+    clear_queue();
+  }
+
   return;
 }
 
@@ -98,8 +104,13 @@ void ICACHE_FLASH_ATTR clear_queue() {
 // transmit a register/data pair
 #define spi_transmit(ADDR, DATA) spi_transaction(HSPI, 0, 0, 8, ADDR, 8, DATA, 0, 0);
 
-// set up the screen for first use
+// set up the screen and other variables for first use
 void ICACHE_FLASH_ATTR display_init() {
+
+  // init the queue
+  queue.length = 0;
+  queue.current_index = 0;
+
   // use the external (not-flash) pins
   spi_init(HSPI);
 
@@ -164,8 +175,9 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
     update_screen(next_frame);
 
   } else {
-    // we've finished the transition! Clean up
+    // we've finished the transition! Clean up and let the queue know we're done
     os_timer_disarm(&trans_timer);
     frame = 0;
+    execute_queue();
   }
 }
