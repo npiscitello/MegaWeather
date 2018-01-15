@@ -4,11 +4,7 @@
 #include "osapi.h"
 #include "driver/spi.h"
 #include "mem.h"
-
-// these make more sense in the graphics header but they're only used by animation functions and I
-// don't want to make this file dependent on the graphics header
-#define ICON_W  8
-#define NUM_W   5
+#include "graphics.h"
 
 #define SCREEN_HEIGHT 8
 #define SCREEN_WIDTH 8
@@ -20,7 +16,9 @@
 // otherwise, the user would have to keep track of what's on the screen manually
 // uses a bit of memory, but I think we can spare it for convenience
 // in main.c, we start up to a blank screen
-uint64_t cur_screen = 0;
+// this could be just a uint64_t, but using the icon struct allows us to easily change the way icon
+// storage is implemented in graphics.h if needed
+icon_t cur_screen = {0, 8};
 
 // serves as janky mutexes
 struct mutex {
@@ -36,15 +34,14 @@ struct mutex {
 
 // I'd rather malloc and free space for this, but the nonos API malloc acts strangely...
 struct transition_data {
-  uint64_t icon;            // new icon to be shown
-  uint8_t icon_width;       // how many columns the icon spans
+  icon_t icon;              // new icon to be shown
   uint8_t frame_no;         // current frame of transition
   uint8_t space         :3; // cols of space between icons; for more than 7, use character[BLANK]
-  uint8_t bool3         :1; 
+  uint8_t bool0         :1; 
+  uint8_t bool1         :1;
+  uint8_t bool2         :1;
+  uint8_t bool3         :1;
   uint8_t bool4         :1;
-  uint8_t bool5         :1;
-  uint8_t bool6         :1;
-  uint8_t bool7         :1;
 } tdata;
 typedef struct transition_data transition_data;
 
@@ -57,13 +54,15 @@ static volatile os_timer_t trans_timer;
 #define spi_transmit(ADDR, DATA) spi_transaction(HSPI, 0, 0, 8, ADDR, 8, DATA, 0, 0);
 
 // update the whole screen in one shot
-void ICACHE_FLASH_ATTR update_screen( uint64_t image ) {
+void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
   mutex.screen = true;
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
-    spi_transmit(i, (uint8_t)(image >> ((i - 1) * 8)));
+    // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
+    // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
+    spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
   }
-  mutex.screen = false;
   cur_screen = image;
+  mutex.screen = false;
 }
 
 
@@ -80,9 +79,10 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
   // other cool stuff like that.
   // Basically, I'm striving for screen state changes to be as atomic as possible, in that the state
   // is always known internally so the user doesn't have to worry about interrupting operations.
-  if( data->frame_no <= data->space + data->icon_width ) {
+  if( data->frame_no <= data->space + data->icon.width ) {
 
-    uint64_t next_frame;
+    icon_t next_frame;
+    next_frame.width = 8;
     for( uint8_t i = 0; i < SCREEN_HEIGHT; i++ ) {
       // treat the 64 bit numbers like an 8 member uint8_t array
       // shifts are 'backwards' because the MSB corresponds to the leftmost column and the LSB
@@ -90,11 +90,10 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
       ((uint8_t*)&next_frame)[i] = 
         ((uint8_t*)&cur_screen)[i] >> 1 |
         ((uint8_t*)&data->icon)[i] << (SCREEN_WIDTH + data->space - data->frame_no);
-        //((uint8_t*)&data->icon)[i] << (data->icon_width + data->space - data->frame_no);
     }
     update_screen(next_frame);
+
   } else {
-    // we're done! disable the timer and free the memory we used for the tdata struct
     os_timer_disarm(&trans_timer);
     mutex.transition = false;
   }
@@ -105,18 +104,16 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
 /* slide transition between 2 icons; 
  * icon: the icon to push to the screen
  * space: the number of blank columns between the current and new icons
- * delay: the frame period, in ms (this value determines how often the timer triggers)
+ * delay: the frame period, in ms (this value determines how often the frame timer triggers)
  *
  * returns: true if the transition was started, false if not
  */
 uint8_t ICACHE_FLASH_ATTR transition( 
-    uint64_t icon, 
-    uint8_t width,
+    icon_t icon, 
     uint8_t space, 
     uint16_t delay ) {
   if( !mutex.transition ) {
     tdata.icon = icon;
-    tdata.icon_width = width;
     tdata.space = space;
 
     tdata.frame_no = 0;
@@ -135,6 +132,21 @@ uint8_t ICACHE_FLASH_ATTR transition(
 
 
 // <TODO> create an API call to fluidly display an arbitrary length string of characters
+/* apply a nonstop slide for an arbitrary number of icons of arbitrary widths, like a ticker
+ * icon_arr: array of icon structs in the order they will be pushed to the screen
+ * num_icons: the number of items in icon_arr
+ * space: the space to put in between each icon
+ * delay: the frame period, in ms (this value determines how often the frame timer triggers)
+ *
+ * returns: true if the transition was started, false if not
+ */
+uint8_t ICACHE_FLASH_ATTR transition_multiple(
+    uint64_t* icon_arr,
+    uint8_t num_icons,
+    uint8_t space,
+    uint16_t delay ) {
+  return false;
+}
 
 
 
