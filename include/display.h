@@ -8,7 +8,7 @@
 // defines a transition from one image to another
 struct transition_data {
   icon_t icon;              // new icon to be shown
-  uint8_t frame_no;         // current frame of transition
+  //uint8_t frame_no;         // current frame of transition
   uint8_t frame_delay;      // how long to wait between frames, in ms
   uint8_t space         :3; // cols of space between icons; for more than 7, use character[BLANK]
   uint8_t bool0         :1; 

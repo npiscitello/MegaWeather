@@ -14,7 +14,6 @@
 // global variables are gross, but this one is necessary - stores the current state of the screen
 // otherwise, the user would have to keep track of what's on the screen manually
 // uses a bit of memory, but I think we can spare it for convenience
-// in main.c, we start up to a blank screen
 // this could be just a uint64_t, but using the icon struct allows us to easily change the way icon
 // storage is implemented in graphics.h if needed
 icon_t cur_screen = {0, 8};
@@ -46,6 +45,9 @@ struct transition_queue {
 // the timer to drive a transition
 static volatile os_timer_t trans_timer;
 
+// current frame - this doesn't really need to be in the transition_data struct
+uint8_t frame = 0;
+
 
 
 // add a transition to the queue if there's space
@@ -65,8 +67,12 @@ void transition_loop( void* tdata_raw );
 uint8_t ICACHE_FLASH_ATTR execute_queue() {
 
   // will involve some form of these...
-  //os_timer_setfn(&trans_timer, (os_timer_func_t *)transition_loop, (void*)&tdata);
-  //os_timer_arm(&trans_timer, delay, 1);
+
+  // as a proof of concept, just execute the first queued transition
+  os_timer_setfn(&trans_timer, (os_timer_func_t *)transition_loop, (void*)&(queue.transitions[0]));
+  os_timer_arm(&trans_timer, queue.transitions[0].frame_delay, 1);
+
+  queue.queue_length = 0;
 
   return 0;
 }
@@ -82,6 +88,12 @@ void ICACHE_FLASH_ATTR clear_queue() {
 }
 
 
+
+/* HERE BE DRAGONS
+ * Functions below this line are low-level actual real-life (sorta) hardware functions - you
+ * shouldn't need to touch them. These are the functions that actually shift the bits out to the
+ * chip; there's nothing much going on down here logic-wise.
+ */
 
 // transmit a register/data pair
 #define spi_transmit(ADDR, DATA) spi_transaction(HSPI, 0, 0, 8, ADDR, 8, DATA, 0, 0);
@@ -131,13 +143,13 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
 // this is the actual transition "loop", which is really just a nonblocking timer function
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
   transition_data_t *data = (transition_data_t *)tdata_raw;
-  (data->frame_no)++;
+  frame++;
 
   // Generate the next frame then push it to the display in one shot.
   // This takes more time and memory, but it allows us to keep the cur_screen var updated.
   // Basically, I'm striving for screen state changes to be as atomic as possible, in that the state
   // is always known internally so the user doesn't have to worry about interrupting operations.
-  if( data->frame_no <= data->space + data->icon.width ) {
+  if( frame <= data->space + data->icon.width ) {
 
     icon_t next_frame;
     next_frame.width = 8;
@@ -147,12 +159,13 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
       // corresponds to the rightmost column
       ((uint8_t*)&next_frame)[i] = 
         ((uint8_t*)&cur_screen)[i] >> 1 |
-        ((uint8_t*)&data->icon)[i] << (SCREEN_WIDTH + data->space - data->frame_no);
+        ((uint8_t*)&data->icon)[i] << (SCREEN_WIDTH + data->space - frame);
     }
     update_screen(next_frame);
 
   } else {
     // we've finished the transition! Clean up
     os_timer_disarm(&trans_timer);
+    frame = 0;
   }
 }

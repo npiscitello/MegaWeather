@@ -10,7 +10,11 @@ struct icon_t {
 };
 typedef struct icon_t icon_t;
 
+// the arrays holding the actual data
 extern const icon_t icon[];
+extern const icon_t digit[];
+extern const icon_t character[];
+
 // direct links to specific icons
 #define SUN       0
 #define MOON      1
@@ -24,9 +28,6 @@ extern const icon_t icon[];
 #define FIRST_ICON     SUN
 #define LAST_ICON      FOG
 
-extern const icon_t digit[];
-
-extern const icon_t character[];
 // direct links to specific characters
 #define EXCLAIM   0
 #define QUESTION  1
