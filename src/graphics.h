@@ -59,6 +59,7 @@ const icon_t ICACHE_RODATA_ATTR character[] =
   {0x001800183060663c, 8},   // .
   {0x0000001b1b000000, 8},   // ..
   {0x000000dbdb000000, 8},   // ...
+  {0x0000000f00000000, 4},   // -
   {0x0000000000000303, 8}    // degrees
 };
 
@@ -69,6 +70,7 @@ const icon_t ICACHE_RODATA_ATTR character[] =
 #define LOAD_0    3
 #define LOAD_1    4
 #define LOAD_2    5
-#define DEGREE    6
+#define NEGATIVE  6
+#define DEGREE    7
 
 #endif

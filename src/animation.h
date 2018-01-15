@@ -12,6 +12,9 @@
 // how long to delay between frames in a slide transition, in ms (0-255)
 #define DEFAULT_DELAY 100
 
+// how many transitions can be queued at once
+#define MAX_QUEUE_LENGTH 5
+
 // global variables are gross, but this one is necessary - stores the current state of the screen
 // otherwise, the user would have to keep track of what's on the screen manually
 // uses a bit of memory, but I think we can spare it for convenience
@@ -38,8 +41,6 @@ struct mutex {
 
 // I'd rather malloc and free space for this, but the nonos API malloc acts strangely...
 struct transition_data {
-  void (*callback)(void*);   // callback function to be called when the transition ends
-  void* callback_arg;       // arg to be passed to that callback func
   icon_t icon;              // new icon to be shown
   uint8_t frame_no;         // current frame of transition
   uint8_t space         :3; // cols of space between icons; for more than 7, use character[BLANK]
@@ -49,7 +50,14 @@ struct transition_data {
   uint8_t bool3         :1;
   uint8_t bool4         :1;
 } tdata;
-typedef struct transition_data transition_data;
+typedef struct transition_data transition_data_t;
+
+// Does this need to be in a struct? Probably not, but it feels cleaner - I hate standalone globals.
+// I mean, I hate globals in general, so...
+struct transition_queue {
+  transition_data_t transitions[MAX_QUEUE_LENGTH];  // the actual queue storage
+  uint8_t queue_size;                               // how many items are currently in the queue
+} queue;
 
 // the timer to drive a transition
 static volatile os_timer_t trans_timer;
@@ -73,9 +81,8 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
 
 
 // this is the actual animation "loop", which is really just a nonblocking timer function
-// <TODO>: account for variable width icons (e.g. numbers)
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
-  transition_data *data = (transition_data *)tdata_raw;
+  transition_data_t *data = (transition_data_t *)tdata_raw;
   (data->frame_no)++;
 
   // Generate the next frame then push it to the display in one shot.
@@ -99,10 +106,9 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
     update_screen(next_frame);
 
   } else {
-    // we've finished the transition! Clean up and call the callback
+    // we've finished the transition! Clean up
     os_timer_disarm(&trans_timer);
     mutex.transition = false;
-    //(data->callback)(data->callback_arg);
   }
 }
 
@@ -120,16 +126,11 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
 uint8_t ICACHE_FLASH_ATTR transition( 
     icon_t icon, 
     uint8_t space, 
-    uint16_t delay,
-    void (*callback)(void*),
-    void* callback_arg ) {
+    uint16_t delay ) {
   if( !mutex.transition ) {
     tdata.icon = icon;
     tdata.space = space;
     
-    tdata.callback = callback;
-    tdata.callback_arg = callback_arg;
-
     tdata.frame_no = 0;
 
     os_timer_setfn(&trans_timer, (os_timer_func_t *)transition_loop, (void*)&tdata);
@@ -170,6 +171,41 @@ uint8_t ICACHE_FLASH_ATTR transition_multiple(
  */
 uint8_t ICACHE_FLASH_ATTR transition_running() {
   return mutex.transition;
+}
+
+
+
+/* adds an item to the end of the transition queue. When flushed, this queue will be executed in
+ * order with no time gap between entries.
+ * item: the transition to execute, placed at the end of the queue
+ * returns: true if the item was added successfully, false if not (the queue is probably full)
+ */
+uint8_t ICACHE_FLASH_ATTR add_to_queue( transition_data_t item ) {
+  if( queue.queue_size < MAX_QUEUE_LENGTH ) {
+    queue.transitions[++queue.queue_size - 1] = item;
+  }
+  return false;
+}
+
+
+
+/* flushes the queue, executing every transition with no time delay and clearing the queue
+ * returns: true if the queue was flushed, false if the transitions were unable to execute. If this
+ *    function returns false, the queue remains intact (i.e, it has not been cleared) and calling
+ *    this function again should produce the expected transition, provided the previous transition
+ *    has ended.
+ */
+uint8_t ICACHE_FLASH_ATTR flush_queue() {
+  return false;
+}
+
+
+
+/* clears the queue without executing any transitions
+ */
+void ICACHE_FLASH_ATTR clear_queue() {
+  queue.queue_size = 0;
+  return;
 }
 
 #endif
