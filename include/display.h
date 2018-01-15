@@ -6,7 +6,7 @@
 #include "graphics.h"
 
 // defines a transition from one image to another
-struct transition_data {
+struct transition {
   icon_t icon;              // new icon to be shown
   //uint8_t frame_no;         // current frame of transition
   uint8_t frame_delay;      // how long to wait between frames, in ms
@@ -17,7 +17,7 @@ struct transition_data {
   uint8_t bool3         :1;
   uint8_t bool4         :1;
 };
-typedef struct transition_data transition_data_t;
+typedef struct transition transition_t;
 
 
 
@@ -39,7 +39,7 @@ void display_brightness(uint8_t brightness);
  * item: the transition to execute, placed at the end of the queue
  * returns: true if the item was added successfully, false if not (the queue is probably full)
  */
-uint8_t add_to_queue( transition_data_t* item );
+uint8_t add_to_queue( transition_t* item );
 
 
 

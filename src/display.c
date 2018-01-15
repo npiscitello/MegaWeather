@@ -38,7 +38,7 @@ struct mutex {
 // Does this need to be in a struct? Probably not, but it feels cleaner - I hate standalone globals.
 // I mean, I hate globals in general, so...
 struct transition_queue {
-  transition_data_t transitions[MAX_QUEUE_LENGTH];  // the actual queue storage
+  transition_t transitions[MAX_QUEUE_LENGTH];  // the actual queue storage
   uint8_t length;                                   // how many items are currently in the queue
   uint8_t current_index;                            // which item we're executing
 } queue;
@@ -52,9 +52,9 @@ uint8_t frame = 0;
 
 
 // add a transition to the queue if there's space
-uint8_t ICACHE_FLASH_ATTR add_to_queue( transition_data_t* item ) {
+uint8_t ICACHE_FLASH_ATTR add_to_queue( transition_t* item ) {
   if( queue.length < MAX_QUEUE_LENGTH ) {
-    os_memcpy(&(queue.transitions[queue.length]), item, sizeof(transition_data_t));
+    os_memcpy(&(queue.transitions[queue.length]), item, sizeof(transition_t));
     queue.length++;
     return true;
   } else {
@@ -84,6 +84,10 @@ void ICACHE_FLASH_ATTR execute_queue() {
     os_timer_setfn(&trans_timer, (os_timer_func_t *)transition_loop, 
         (void*)&(queue.transitions[queue.current_index]));
     os_timer_arm(&trans_timer, queue.transitions[queue.current_index].frame_delay, 1);
+
+    // kick off the first frame manually, fixes the timing glitch
+    transition_loop( (void*)&(queue.transitions[queue.current_index]) );
+
     queue.current_index++;
 
   } else {
@@ -153,7 +157,7 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
 
 // this is the actual transition "loop", which is really just a nonblocking timer function
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
-  transition_data_t *data = (transition_data_t *)tdata_raw;
+  transition_t *data = (transition_t *)tdata_raw;
   frame++;
 
   // Generate the next frame then push it to the display in one shot.
