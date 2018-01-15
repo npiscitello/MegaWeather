@@ -7,7 +7,7 @@
 
 // blink timers
 static volatile os_timer_t change_timer;
-#define PERIOD 5000
+#define PERIOD 2500
 
 void ICACHE_FLASH_ATTR disp_image(void *arg) {
   (void)arg;

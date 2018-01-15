@@ -78,7 +78,11 @@ void ICACHE_FLASH_ATTR clear_queue() {
 // I need to declare this function to be able to use it
 void transition_loop( void* tdata_raw );
 // execute queued transitions and clear the queue
-void ICACHE_FLASH_ATTR execute_queue() {
+void ICACHE_FLASH_ATTR queue_helper() {
+
+  // clean up after the last run
+  os_timer_disarm( &trans_timer );
+  frame = 0;
 
   if( queue.current_index < queue.length ) {
     os_timer_setfn(&trans_timer, (os_timer_func_t *)transition_loop, 
@@ -95,6 +99,13 @@ void ICACHE_FLASH_ATTR execute_queue() {
   }
 
   return;
+}
+
+
+
+void ICACHE_FLASH_ATTR execute_queue() {
+  queue.current_index = 0;
+  queue_helper();
 }
 
 
@@ -179,9 +190,7 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
     update_screen(next_frame);
 
   } else {
-    // we've finished the transition! Clean up and let the queue know we're done
-    os_timer_disarm(&trans_timer);
-    frame = 0;
-    execute_queue();
+    // we've finished the transition! Let the queue know we're done
+    queue_helper();
   }
 }
