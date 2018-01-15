@@ -54,7 +54,7 @@ uint8_t frame = 0;
 // add a transition to the queue if there's space
 uint8_t ICACHE_FLASH_ATTR add_to_queue( transition_data_t* item ) {
   if( queue.length < MAX_QUEUE_LENGTH ) {
-    os_memcpy(&queue.transitions + (queue.length), item, sizeof(transition_data_t));
+    os_memcpy(&(queue.transitions[queue.length]), item, sizeof(transition_data_t));
     queue.length++;
     return true;
   } else {

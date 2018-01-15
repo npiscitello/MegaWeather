@@ -19,7 +19,6 @@ void ICACHE_FLASH_ATTR disp_image(void *arg) {
   trans.icon = digit[0];
   add_to_queue( &trans );
 
-  /*
   trans.icon = digit[1];
   add_to_queue( &trans );
 
@@ -31,7 +30,9 @@ void ICACHE_FLASH_ATTR disp_image(void *arg) {
 
   trans.icon = icon[FOG];
   add_to_queue( &trans );
-  */
+
+  trans.icon = digit[4];
+  add_to_queue( &trans );
 
   execute_queue();
 }
