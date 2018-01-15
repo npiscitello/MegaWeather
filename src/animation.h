@@ -38,6 +38,8 @@ struct mutex {
 
 // I'd rather malloc and free space for this, but the nonos API malloc acts strangely...
 struct transition_data {
+  void (*callback)(void*);   // callback function to be called when the transition ends
+  void* callback_arg;       // arg to be passed to that callback func
   icon_t icon;              // new icon to be shown
   uint8_t frame_no;         // current frame of transition
   uint8_t space         :3; // cols of space between icons; for more than 7, use character[BLANK]
@@ -97,8 +99,10 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
     update_screen(next_frame);
 
   } else {
+    // we've finished the transition! Clean up and call the callback
     os_timer_disarm(&trans_timer);
     mutex.transition = false;
+    //(data->callback)(data->callback_arg);
   }
 }
 
@@ -108,16 +112,23 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
  * icon: the icon to push to the screen
  * space: the number of blank columns between the current and new icons
  * delay: the frame period, in ms (this value determines how often the frame timer triggers)
+ * callback: pointer to a function to run when the transition has finished
+ * callback_arg: pointer to an arg that will be passed to that callback function
  *
  * returns: true if the transition was started, false if not
  */
 uint8_t ICACHE_FLASH_ATTR transition( 
     icon_t icon, 
     uint8_t space, 
-    uint16_t delay ) {
+    uint16_t delay,
+    void (*callback)(void*),
+    void* callback_arg ) {
   if( !mutex.transition ) {
     tdata.icon = icon;
     tdata.space = space;
+    
+    tdata.callback = callback;
+    tdata.callback_arg = callback_arg;
 
     tdata.frame_no = 0;
 
@@ -142,7 +153,7 @@ uint8_t ICACHE_FLASH_ATTR transition(
  *
  * returns: true if the transition was started, false if not
  */
-// <TODO>: blocking? Is there a way to callback?
+// <TODO>: Must be non-blocking; we can't block the execution thread for too long
 uint8_t ICACHE_FLASH_ATTR transition_multiple(
     uint64_t* icon_arr,
     uint8_t num_icons,

@@ -15,9 +15,9 @@ void ICACHE_FLASH_ATTR disp_image(void *arg) {
 
   if( !transition_running() ) {
     if( counter <= 9 ) {
-      transition(digit[counter], 1, 100);
+      transition(digit[counter], 1, 100, NULL, NULL);
     } else {
-      transition(icon[FOG], 1, 100);
+      transition(icon[FOG], 1, 100, NULL, NULL);
     }
     
     if( counter++ == 10 ) {
