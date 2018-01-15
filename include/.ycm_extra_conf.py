@@ -46,7 +46,7 @@ flags = [
 # gets updated. Run 'echo | clang -v -E -x c++ -' and replace these paths with anything
 # under the '#include <...> search starts here:' headings. You'll probably only have to
 # change the numbers.
-'-isystem', '../include',
+'-isystem', '.',
 '-isystem', '/home/npiscitello/custom_build/esp-open-sdk/ESP8266_NONOS_SDK_V2.0.0_16_08_10/include',
 '-isystem', '../lib/ESP8266_SPI_Driver/include'
 ]

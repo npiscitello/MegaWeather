@@ -11,3 +11,4 @@
 .dep/
 *.bin
 *_compiled
+build/
