@@ -7,6 +7,7 @@ const icon_t ICACHE_RODATA_ATTR icon[] =
   {0x3c4299bdbd99423c, 8},   // clear (sun)
   {0x30180c0e0e0c1830, 8},   // clear (moon)
   {0x0000007e8181621c, 8},   // partly cloudy
+  {0x0000007ed5ab761c, 8},   // mostly cloudy
   {0x0000007effff7e1c, 8},   // cloudy
   {0x8452087effff7e1c, 8},   // precip (rain, sleet, etc.)
   {0xa524e71818e724a5, 8},   // snow

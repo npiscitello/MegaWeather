@@ -16,21 +16,24 @@ extern const icon_t digit[];
 extern const icon_t character[];
 
 // direct links to specific icons
-#define SUN       0
-#define MOON      1
-#define P_CLOUD   2
-#define CLOUD     3
-#define PRECIP    4
-#define SNOW      5
-#define WIND      6
-#define FOG       7
+// comments represent the API "icon" strings each icon will correspond to
+//      NAME    INDEX     TYPE      API "ICON" STRINGS
+#define SUN       0   //  clear     (clear, sunny) (daytime)
+#define MOON      1   //  clear     (clear, sunny) (nighttime)
+#define P_CLOUD   2   //  clear     (partlycloudy, mostlysunny)
+#define M_CLOUD   3   //  cloudy    (mostlycloudy, partlysunny)
+#define CLOUD     4   //  cloudy    (cloudy)
+#define PRECIP    5   //  precip    (chancerain, chancesleet, chancetstorms, sleet, rain, tstorms)
+#define SNOW      6   //  precip    (chanceflurries, chancesnow, flurries, snow)
+#define WIND      7   //  clear     (any clear/cloudy status and wind over a certain threshhold)
+#define FOG       8   //  cloudy    (fog, hazy)
 // Link to the first and last icons
 #define FIRST_ICON     SUN
 #define LAST_ICON      FOG
 
 // direct links to specific characters
 #define EXCLAIM   0
-#define QUESTION  1
+#define QUESTION  1   // unknown
 #define BLANK     2
 #define LOAD_0    3
 #define LOAD_1    4
