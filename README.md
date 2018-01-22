@@ -77,3 +77,8 @@ command in the Makefile accordingly.
 * TODO:
   * Should users be able to add to the queue while its executing? Should they be able to clear it?
     Clearing the queue during execution serves effectively as cancelling the execution...
+
+## API
+This project proudly uses the [WeatherUnderground](https://www.wunderground.com) API.
+
+![wunderground logo](https://icons.wxug.com/logos/PNG/wundergroundLogo_4c_horz.png)
