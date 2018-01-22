@@ -1,14 +1,15 @@
-# hackWITus
+# Project Planning
 
-This is a to-do list of sorts in preparation for the hackathon. This project has officially moved to
-the esp8266 platform.
+~~This is a to-do list of sorts in preparation for the hackathon. This project has officially moved to
+the esp8266 platform.~~ This list was to help plan for work during a hackathon; now, it's just the
+general project todo list.
 
 0. ~~get some kind of debugging output console over usb?~~
 1. ~~SPI comms (get *something* to display on the matrix)~~
 2. ~~re-implement icon set~~
-3. animations!
+3. ~~animations!~~
 4. Get Wifi connected and pull dummy data from somewhere (try example.com)
-5. find a weather API (to hit every hour or half hour ish)
+5. ~~find a weather API (to hit every hour or half hour ish)~~
 6. sync icons with API; add as needed - get them displaying properly!
 7. display temperature, precip % chance, etc.
 
@@ -49,15 +50,15 @@ command in the Makefile accordingly.
 
 ## Notes
 
-* The SPI library is **not mine**! It was researched and built by David Ogilvy (aka MetalPhreak),
-  who did a *very* nice job with it! Check inside that folder for more information, including a
-  link to his blog!
+* The ESP8266 SPI library is **not mine**! It was researched and built by David Ogilvy (aka 
+  MetalPhreak), who did a *very* nice job with it! Check inside the lib folder for more
+  information, including a link to his blog!
 
 * See [xantorohara's project](https://github.com/xantorohara/led-matrix-editor) for a really cool
   browser-based tool for 8x8 matrix planning. Use the following address to access the
   tool with the weather icons pre-loaded!
 
-      http://xantorohara.github.io/led-matrix-editor/#3c4299bdbd99423c|30180c0e0e0c1830|0000007e8181621c|0000007effff7e1c|8452087effff7e1c|a524e71818e724a5|7e01e61060fc020c|aa55aa55aa55aa55
+      http://xantorohara.github.io/led-matrix-editor/#3c4299bdbd99423c|30180c0e0e0c1830|0000007e8181621c|0000007ed5ab761c|0000007effff7e1c|8452087effff7e1c|a524e71818e724a5|7e01e61060fc020c|aa55aa55aa55aa55
 
 * ~~This will probably not be ATMEGA328P based forever; I'm looking at the ESP8266 as a (tiny!)
   single-chip solution~~ See above; the platform changeover is done.
