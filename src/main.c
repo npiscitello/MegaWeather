@@ -3,6 +3,7 @@
 #include "os_type.h"
 #include "graphics.h"
 #include "display.h"
+#include "network.h"
 
 
 // blink timers
