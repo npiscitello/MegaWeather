@@ -14,4 +14,9 @@ void ICACHE_FLASH_ATTR connect( const char* ssid, const uint8_t ssid_len,
   wifi_station_set_config(&stationConf);
 }
 
+
+
+void ICACHE_FLASH_ATTR update_data( weather_data_t* data_struct ) {
 // API request: conditions/hourly/q/MA/Boston.json
+
+}
