@@ -168,13 +168,12 @@ void ICACHE_FLASH_ATTR display_init() {
   SPIInit(SpiNum_HSPI, &spi);
 
   // do manual SPI magic for now, to test...
-  uint32_t addr_32 = 0;
   uint32_t data_32 = 0;
   SpiData spistruct;
     spistruct.cmd = 0;
-    spistruct.cmdLen = 0;
-    spistruct.addr = &addr_32;
-    spistruct.addrLen = 1;
+    spistruct.cmdLen = 1;
+    spistruct.addr = 0;
+    spistruct.addrLen = 0;
     spistruct.data = &data_32;
     spistruct.dataLen = 1;
 
@@ -182,17 +181,17 @@ void ICACHE_FLASH_ATTR display_init() {
   // setup for the MAX7221 chip (through a TXB0104 level shifter)
   // don't use the decode table
   //spi_transmit(0x09, 0x00);
-  addr_32 = 0x09000000; data_32 = 0x00000000;
+  spistruct.cmd = 0x0900; data_32 = 0x00000000;
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
 
   // set intensity to middle ground
   //spi_transmit(0x0A, 0x08);
-  addr_32 = 0x0A000000; data_32 = 0x08000000;
+  spistruct.cmd = 0x0A00; data_32 = 0x08000000;
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
 
   // scan across all digits
   //spi_transmit(0x0b, 0x07);
-  addr_32 = 0x0b000000; data_32 = 0x07000000;
+  spistruct.cmd = 0x0b00; data_32 = 0x07000000;
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
 
   // turn off all pixels - I could use update_screen for this, but I don't need the fancy shifting
@@ -200,26 +199,26 @@ void ICACHE_FLASH_ATTR display_init() {
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
     //spi_transmit(i, 0xFF);
   }
-  addr_32 = 0x01000000; data_32 = 0x00000000;
+  spistruct.cmd = 0x0100; data_32 = 0x00000000;
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
-  addr_32 = 0x02000000; data_32 = 0x00000000;
+  spistruct.cmd = 0x0200; data_32 = 0x00000000;
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
-  addr_32 = 0x03000000; data_32 = 0x00000000;
+  spistruct.cmd = 0x0300; data_32 = 0x00000000;
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
-  addr_32 = 0x04000000; data_32 = 0x00000000;
+  spistruct.cmd = 0x0400; data_32 = 0x00000000;
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
-  addr_32 = 0x05000000; data_32 = 0x00000000;
+  spistruct.cmd = 0x0500; data_32 = 0x00000000;
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
-  addr_32 = 0x06000000; data_32 = 0x00000000;
+  spistruct.cmd = 0x0600; data_32 = 0x00000000;
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
-  addr_32 = 0x07000000; data_32 = 0x00000000;
+  spistruct.cmd = 0x0700; data_32 = 0x00000000;
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
-  addr_32 = 0x08000000; data_32 = 0x00000000;
+  spistruct.cmd = 0x0800; data_32 = 0x00000000;
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
 
   // take the chip out of shutdown
   //spi_transmit(0x0C, 0x01);
-  addr_32 = 0x0C000000; data_32 = 0x01000000;
+  spistruct.cmd = 0x0C00; data_32 = 0x01000000;
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
 }
 
