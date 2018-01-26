@@ -129,14 +129,12 @@ uint8_t ICACHE_FLASH_ATTR queue_executing() {
 // convenience function to transmit SPI
 // yeah, it has to allocate memory for an SpiData struct every time, but... premature optimization!
 void ICACHE_FLASH_ATTR spi_transmit( const uint8_t addr, const uint8_t data ) {
-  uint32_t addr_16 = (uint16_t)addr;
-  uint32_t data_32 = (uint32_t)data;
   SpiData spistruct;
-  spistruct.cmd = addr_16;
+  spistruct.cmd = addr;
   spistruct.cmdLen = 1;
   spistruct.addr = 0;
   spistruct.addrLen = 0;
-  spistruct.data = &data_32;
+  spistruct.data = (uint32_t*)&data;
   spistruct.dataLen = 1;
 
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
