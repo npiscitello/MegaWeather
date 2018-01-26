@@ -5,9 +5,6 @@
 #include "display.h"
 #include "graphics.h"
 
-// We want HSPI, which is defined to be 1 in a header we don't need
-#define HSPI 1
-
 // actual pixel dimensions of the LED array
 #define SCREEN_HEIGHT 8
 #define SCREEN_WIDTH 8
@@ -129,8 +126,20 @@ uint8_t ICACHE_FLASH_ATTR queue_executing() {
  * chip; there's nothing much going on down here logic-wise.
  */
 
-// transmit a register/data pair
-#define spi_transmit(ADDR, DATA) spi_transaction(HSPI, 0, 0, 8, ADDR, 8, DATA, 0, 0);
+// convenience function to transmit SPI
+// yeah, it has to allocate memory for an SpiData struct every time, but... premature optimization!
+void ICACHE_FLASH_ATTR spi_transmit( const uint8_t addr, const uint8_t data ) {
+  SpiData spistruct;
+  spistruct.cmd = MASTER_WRITE_DATA_TO_SLAVE_CMD;
+  spistruct.cmdLen = 1;
+  spistruct.addr = (uint32_t*)&addr;
+  spistruct.addrLen = 1;
+  spistruct.data = (uint32_t*)&data;
+  spistruct.dataLen = 1;
+
+  SPIMasterSendData(SpiNum_HSPI, &spistruct);
+}
+
 
 // set up the screen and other variables for first use
 void ICACHE_FLASH_ATTR display_init() {
@@ -139,13 +148,18 @@ void ICACHE_FLASH_ATTR display_init() {
   queue.length = 0;
   queue.current_index = 0;
 
-  // use the external (not-flash) pins
-  spi_init(HSPI);
-
-  // valid data on clock leading edge, clock is low when inactive
-  spi_mode(HSPI, 0, 0);
+  // use the external (not-flash) pins with the specified settings
+  SpiAttr spi;
+    spi.mode = SpiMode_Master;
+    // clock inactive low (CPOL 0), data on leading edge (CPHA 0)
+    spi.subMode = SpiSubMode_0;
+    // MAX7221 has a 10MHz interface, but we're gonna keep it slower until we know it works
+    spi.speed = SpiSpeed_5MHz;
+    spi.bitOrder = SpiBitOrder_MSBFirst;
+  SPIInit(SpiNum_HSPI, &spi);
 
   // setup for the MAX7221 chip (through a TXB0104 level shifter)
+
   // don't use the decode table
   spi_transmit(0x09, 0x00);
   // set intensity to middle ground
@@ -163,7 +177,7 @@ void ICACHE_FLASH_ATTR display_init() {
 
 // change the software-defined display brightness
 void ICACHE_FLASH_ATTR display_brightness( uint8_t brightness ) {
-  //spi_transmit(0x0A, brightness);
+  spi_transmit(0x0A, brightness);
 }
 
 // update the whole screen in one shot
@@ -172,7 +186,7 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
     // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
     // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
-    //spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
+    spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
   }
   cur_screen = image;
 }
