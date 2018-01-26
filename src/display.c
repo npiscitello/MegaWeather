@@ -129,8 +129,8 @@ uint8_t ICACHE_FLASH_ATTR queue_executing() {
 // convenience function to transmit SPI
 // yeah, it has to allocate memory for an SpiData struct every time, but... premature optimization!
 void ICACHE_FLASH_ATTR spi_transmit( const uint8_t addr, const uint8_t data ) {
-  uint32_t addr_16 = (uint32_t)addr << 8;
-  uint32_t data_32 = (uint32_t)data << 24;
+  uint32_t addr_16 = (uint16_t)addr;
+  uint32_t data_32 = (uint32_t)data;
   SpiData spistruct;
   spistruct.cmd = addr_16;
   spistruct.cmdLen = 1;
@@ -163,7 +163,7 @@ void ICACHE_FLASH_ATTR display_init() {
     // clock inactive low (CPOL 0), data on leading edge (CPHA 0)
     spi.subMode = SpiSubMode_0;
     // MAX7221 has a 10MHz interface, but we're gonna keep it slower until we know it works
-    spi.speed = SpiSpeed_5MHz;
+    spi.speed = SpiSpeed_10MHz;
     spi.bitOrder = SpiBitOrder_MSBFirst;
   SPIInit(SpiNum_HSPI, &spi);
 
@@ -188,7 +188,7 @@ void ICACHE_FLASH_ATTR display_init() {
   // turn off all pixels - I could use update_screen for this, but I don't need the fancy shifting
   // I'll probably start using it if I need to worry about mutexes
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
-    spi_transmit(i, 0xFF);
+    spi_transmit(i, 0x00);
   }
   // take the chip out of shutdown
   spi_transmit(0x0C, 0x01);
