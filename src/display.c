@@ -1,8 +1,12 @@
+#include "os_type.h"
 #include "osapi.h"
-#include "driver/spi.h"
+#include "driver/spi_interface.h"
 
 #include "display.h"
 #include "graphics.h"
+
+// We want HSPI, which is defined to be 1 in a header we don't need
+#define HSPI 1
 
 // actual pixel dimensions of the LED array
 #define SCREEN_HEIGHT 8
@@ -159,7 +163,7 @@ void ICACHE_FLASH_ATTR display_init() {
 
 // change the software-defined display brightness
 void ICACHE_FLASH_ATTR display_brightness( uint8_t brightness ) {
-  spi_transmit(0x0A, brightness);
+  //spi_transmit(0x0A, brightness);
 }
 
 // update the whole screen in one shot
@@ -168,7 +172,7 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
     // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
     // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
-    spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
+    //spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
   }
   cur_screen = image;
 }

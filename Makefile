@@ -1,12 +1,11 @@
 CC 				:= 	xtensa-lx106-elf-gcc
 CFLAGS 		:= 	-Iinclude \
-							-Ilib/ESP8266_SPI_Driver/include \
 							-DICACHE_FLASH \
 							-mlongcalls \
 							-std=c99 \
 							-Wno-implicit-function-declaration
 
-LDLIBS 		:= 	-nostdlib -Wl,--start-group -lmain -lnet80211 -lwpa -llwip -lpp -lphy -ldriver -lc -Wl,--end-group -lgcc
+LDLIBS 		:= 	-nostdlib -Wl,--start-group -ldriver -lmain -lnet80211 -lwpa -llwip -lpp -lphy -ldriver -lc -Wl,--end-group -lgcc
 LDFLAGS 	:= 	-Teagle.app.v6.ld
 
 SRC_DIR 	:=	src
@@ -15,7 +14,6 @@ BUILD_DIR := 	build
 MAIN  		:=	$(BUILD_DIR)/megaweather
 
 CSRCS 		:= 	$(wildcard $(SRC_DIR)/*.c)
-CSRCS 		+= 	lib/ESP8266_SPI_Driver/driver/spi.c
 
 OBJS 			:= 	$(notdir $(CSRCS))
 OBJS 			:= 	$(patsubst %.c, $(BUILD_DIR)/%.o, $(OBJS))

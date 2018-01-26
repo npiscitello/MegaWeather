@@ -48,7 +48,6 @@ flags = [
 # change the numbers.
 '-isystem', '/home/npiscitello/custom_build/esp-open-sdk/ESP8266_NONOS_SDK_V2.0.0_16_08_10/include',
 '-isystem', '../include',
-'-isystem', '../lib/ESP8266_SPI_Driver/include'
 ]
 
 
