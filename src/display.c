@@ -37,7 +37,7 @@ struct mutex {
 // Does this need to be in a struct? Probably not, but it feels cleaner - I hate standalone globals.
 // I mean, I hate globals in general, so...
 struct transition_queue {
-  transition_t transitions[MAX_QUEUE_LENGTH];  // the actual queue storage
+  transition_t transitions[MAX_QUEUE_LENGTH];       // the actual queue storage
   uint8_t length;                                   // how many items are currently in the queue
   uint8_t current_index;                            // which item we're executing
 } queue;
@@ -74,9 +74,8 @@ void ICACHE_FLASH_ATTR clear_queue() {
 
 
 
-// I need to declare these functions to be able to use it
+// I need to declare these functions to be able to use them
 void transition_loop( void* tdata_raw );
-void update_screen( const icon_t image );
 // execute queued transitions and clear the queue
 void ICACHE_FLASH_ATTR queue_helper() {
 
@@ -128,6 +127,7 @@ uint8_t ICACHE_FLASH_ATTR queue_executing() {
 
 // convenience function to transmit SPI
 // yeah, it has to allocate memory for an SpiData struct every time, but... premature optimization!
+// <TODO> use callback to implement mutex?
 void ICACHE_FLASH_ATTR spi_transmit( const uint8_t addr, const uint8_t data ) {
   SpiData spistruct;
   spistruct.cmd = addr;
@@ -138,6 +138,7 @@ void ICACHE_FLASH_ATTR spi_transmit( const uint8_t addr, const uint8_t data ) {
   spistruct.dataLen = 1;
 
   SPIMasterSendData(SpiNum_HSPI, &spistruct);
+  return;
 }
 
 
@@ -165,17 +166,6 @@ void ICACHE_FLASH_ATTR display_init() {
     spi.bitOrder = SpiBitOrder_MSBFirst;
   SPIInit(SpiNum_HSPI, &spi);
 
-  // do manual SPI magic for now, to test...
-  uint32_t data_32 = 0;
-  SpiData spistruct;
-    spistruct.cmd = 0;
-    spistruct.cmdLen = 1;
-    spistruct.addr = 0;
-    spistruct.addrLen = 0;
-    spistruct.data = &data_32;
-    spistruct.dataLen = 1;
-
-
   // setup for the MAX7221 chip (through a TXB0104 level shifter)
   // don't use the decode table
   spi_transmit(0x09, 0x00);
@@ -190,11 +180,13 @@ void ICACHE_FLASH_ATTR display_init() {
   }
   // take the chip out of shutdown
   spi_transmit(0x0C, 0x01);
+  return;
 }
 
 // change the software-defined display brightness
 void ICACHE_FLASH_ATTR display_brightness( uint8_t brightness ) {
   spi_transmit(0x0A, brightness);
+  return;
 }
 
 // update the whole screen in one shot
@@ -206,6 +198,7 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
     spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
   }
   cur_screen = image;
+  return;
 }
 
 
@@ -213,6 +206,7 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
 // this is the actual transition "loop", which is really just a nonblocking timer function
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
   transition_t *data = (transition_t *)tdata_raw;
+
   frame++;
 
   // skip to the last frame if requested, artifically shifting cur_screen appropriately
@@ -230,19 +224,21 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
   if( frame <= data->space + data->icon.width ) {
 
     icon_t next_frame;
-    next_frame.width = 8;
+    next_frame.width = SCREEN_WIDTH;
     for( uint8_t i = 0; i < SCREEN_HEIGHT; i++ ) {
       // treat the 64 bit numbers like an 8 member uint8_t array
       // shifts are 'backwards' because the MSB corresponds to the leftmost column and the LSB
       // corresponds to the rightmost column
-      ((uint8_t*)&next_frame)[i] = 
+      ((uint8_t*)&(next_frame.icon))[i] = 
         ((uint8_t*)&cur_screen)[i] >> 1 |
         ((uint8_t*)&data->icon)[i] << (SCREEN_WIDTH + data->space - frame);
     }
-    update_screen(next_frame);
+    //update_screen(next_frame);
+    update_screen(data->icon);
 
   } else {
     // we've finished the transition! Let the queue know we're done
     queue_helper();
   }
+  return;
 }
