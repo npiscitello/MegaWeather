@@ -9,9 +9,6 @@
 #define SCREEN_HEIGHT 8
 #define SCREEN_WIDTH 8
 
-// how many transitions can be queued at once
-#define MAX_QUEUE_LENGTH 5
-
 // global variables are gross, but this one is necessary - stores the current state of the screen
 // otherwise, the user would have to keep track of what's on the screen manually
 // uses a bit of memory, but I think we can spare it for convenience
@@ -34,87 +31,30 @@ struct mutex {
   volatile uint8_t mutex7        :1;
 } mutex;
 
-// Does this need to be in a struct? Probably not, but it feels cleaner - I hate standalone globals.
-// I mean, I hate globals in general, so...
-struct transition_queue {
-  transition_t transitions[MAX_QUEUE_LENGTH];       // the actual queue storage
-  uint8_t length;                                   // how many items are currently in the queue
-  uint8_t current_index;                            // which item we're executing
-} queue;
-
 // the timer to drive a transition
 static volatile os_timer_t trans_timer;
 
 // current frame - this doesn't really need to be in the transition_data struct
 uint8_t frame = 0;
 
-
-
-// add a transition to the queue if there's space
-uint8_t ICACHE_FLASH_ATTR add_to_queue( transition_t* item ) {
-  if( queue.length < MAX_QUEUE_LENGTH ) {
-    os_memcpy(&(queue.transitions[queue.length]), item, sizeof(transition_t));
-    queue.length++;
-    return true;
-  } else {
-    return false;
-  }
-}
+// REMOVE ME - internal storage for a transition, for testing
+transition_t internal_trans;
 
 
 
-// reset the queue without executing any queued transitions
-void ICACHE_FLASH_ATTR clear_queue() {
-  // we don't really need to worry about actually clearing the memory - it will get overwritten if
-  // it needs to be
-  queue.current_index = 0;
-  queue.length = 0;
-  return;
-}
+/* execute a single transition
+ * trans: a struct defining the transition
+ */
+void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw );
+void ICACHE_FLASH_ATTR execute_transition(transition_t* trans) {
 
-
-
-// I need to declare these functions to be able to use them
-void transition_loop( void* tdata_raw );
-// execute queued transitions and clear the queue
-void ICACHE_FLASH_ATTR queue_helper() {
-
-  // clean up after the previous run; having these here instead of in transition_loop allows us to
-  // interrupt queue executions with other queue executions
-  os_timer_disarm( &trans_timer );
-  frame = 0;
-
-  if( queue.current_index < queue.length ) {
-    os_timer_setfn(&trans_timer, (os_timer_func_t *)transition_loop, 
-        (void*)&(queue.transitions[queue.current_index]));
-    os_timer_arm(&trans_timer, queue.transitions[queue.current_index].frame_delay, 1);
-
-    // kick off the first frame manually, fixes the timing glitch
-    transition_loop( (void*)&(queue.transitions[queue.current_index]) );
-
-    queue.current_index++;
-
-  } else {
-    // we're done with the queue
-    clear_queue();
-    mutex.queue = false;
-  }
+  // we can directly use the pointer b/c this function blocks
+  do {
+    transition_loop(trans);
+    os_delay_us(50000);
+  } while( frame != 0 );
 
   return;
-}
-
-
-
-void ICACHE_FLASH_ATTR execute_queue() {
-  queue.current_index = 0;
-  mutex.queue = true;
-  queue_helper();
-}
-
-
-
-uint8_t ICACHE_FLASH_ATTR queue_executing() {
-  return mutex.queue;
 }
 
 
@@ -144,10 +84,6 @@ void ICACHE_FLASH_ATTR spi_transmit( const uint8_t addr, const uint8_t data ) {
 
 // set up the screen and other variables for first use
 void ICACHE_FLASH_ATTR display_init() {
-
-  // init the queue
-  queue.length = 0;
-  queue.current_index = 0;
 
   // init external SPI pins
   WRITE_PERI_REG(PERIPHS_IO_MUX, 0x105);
@@ -207,6 +143,7 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
   transition_t *data = (transition_t *)tdata_raw;
 
+  // frame 0 is the current screen, 1 is the first transition frame, etc...
   frame++;
 
   // skip to the last frame if requested, artifically shifting cur_screen appropriately
@@ -221,6 +158,7 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
   // This takes more time and memory, but it allows us to keep the cur_screen var updated.
   // Basically, I'm striving for screen state changes to be as atomic as possible, in that the state
   // is always known internally so the user doesn't have to worry about interrupting operations.
+  //if( frame <= data->space + data->icon.width ) {
   if( frame <= data->space + data->icon.width ) {
 
     icon_t next_frame;
@@ -237,7 +175,7 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
 
   } else {
     // we've finished the transition! Let the queue know we're done
-    queue_helper();
+    frame = 0;
   }
   return;
 }
