@@ -233,8 +233,7 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
         ((uint8_t*)&cur_screen)[i] >> 1 |
         ((uint8_t*)&data->icon)[i] << (SCREEN_WIDTH + data->space - frame);
     }
-    //update_screen(next_frame);
-    update_screen(data->icon);
+    update_screen(next_frame);
 
   } else {
     // we've finished the transition! Let the queue know we're done
