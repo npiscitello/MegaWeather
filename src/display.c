@@ -46,13 +46,15 @@ transition_t internal_trans;
  * trans: a struct defining the transition
  */
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw );
-void ICACHE_FLASH_ATTR execute_transition(transition_t* trans) {
+void ICACHE_FLASH_ATTR execute_transition(transition_t trans) {
 
-  // we can directly use the pointer b/c this function blocks
-  do {
-    transition_loop(trans);
-    os_delay_us(50000);
-  } while( frame != 0 );
+  internal_trans = trans;
+  internal_trans.frame_delay = 100;
+  internal_trans.space = 3;
+
+  os_timer_setfn(&trans_timer, (os_timer_func_t*)transition_loop, &internal_trans);
+  os_timer_arm(&trans_timer, internal_trans.frame_delay, 1);
+  transition_loop((void*)&internal_trans);
 
   return;
 }
@@ -174,7 +176,8 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
     update_screen(next_frame);
 
   } else {
-    // we've finished the transition! Let the queue know we're done
+    // we've finished the transition!
+    os_timer_disarm(&trans_timer);
     frame = 0;
   }
   return;

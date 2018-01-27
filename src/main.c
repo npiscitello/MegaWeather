@@ -19,7 +19,7 @@ void ICACHE_FLASH_ATTR disp_image(void *arg) {
     trans.frame_delay = 100;
     trans.space = 5;
     trans.instant = false;
-  execute_transition(&trans);
+  execute_transition(trans);
 
 }
 
