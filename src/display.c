@@ -47,10 +47,8 @@ transition_t internal_trans;
  */
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw );
 void ICACHE_FLASH_ATTR execute_transition(transition_t trans) {
-
   internal_trans = trans;
-  internal_trans.frame_delay = 100;
-  internal_trans.space = 3;
+  internal_trans.frame_delay = 75;
 
   os_timer_setfn(&trans_timer, (os_timer_func_t*)transition_loop, &internal_trans);
   os_timer_arm(&trans_timer, internal_trans.frame_delay, 1);

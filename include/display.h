@@ -4,6 +4,10 @@
 // it hurts a little bit to have to #include so much in a header...
 #include "c_types.h"
 #include "graphics.h"
+#include <os_type.h>
+
+// <TODO> remove me!
+void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw );
 
 // defines a transition from one image to another
 struct transition_struct{
