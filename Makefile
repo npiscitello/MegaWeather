@@ -37,11 +37,11 @@ $(MAIN): $(OBJS)
 	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
 # compile
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $(BUILD_DIR)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 # libraries are special cases. Yeah, this sucks - my Make-fu is a little weak
-$(BUILD_DIR)/%.o: lib/ESP8266_SPI_Driver/driver/spi.c $(BUILD_DIR)
+$(BUILD_DIR)/%.o: lib/ESP8266_SPI_Driver/driver/spi.c | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 # flashing probs? try a lower baudrate, like 921600, 460800, 230400, or remove the arg alltogether
