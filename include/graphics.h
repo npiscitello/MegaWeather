@@ -11,9 +11,9 @@ struct icon_t {
 typedef struct icon_t icon_t;
 
 // the arrays holding the actual data
-extern const icon_t icon[];
-extern const icon_t digit[];
-extern const icon_t character[];
+extern const icon_t image_arr[];
+extern const icon_t digit_arr[];
+extern const icon_t character_arr[];
 
 // direct links to specific icons
 // comments represent the API "icon" strings each icon will correspond to

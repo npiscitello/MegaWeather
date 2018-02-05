@@ -2,7 +2,7 @@
 
 // weather icons as noted - some stolen shamelessly from
 // https://electricimp.com/docs/learning/weather/
-const icon_t ICACHE_RODATA_ATTR icon[] =
+const icon_t ICACHE_RODATA_ATTR image_arr[] =
 {
   {0x3c4299bdbd99423c, 8},   // clear (sun)
   {0x30180c0e0e0c1830, 8},   // clear (moon)
@@ -15,7 +15,7 @@ const icon_t ICACHE_RODATA_ATTR icon[] =
   {0xaa55aa55aa55aa55, 8}    // fog
 };
 
-const icon_t ICACHE_RODATA_ATTR digit[] =
+const icon_t ICACHE_RODATA_ATTR digit_arr[] =
 {
   {0x0e1111111111110e, 5},   // 0
   {0x1f04040404050604, 5},   // 1
@@ -29,7 +29,7 @@ const icon_t ICACHE_RODATA_ATTR digit[] =
   {0x0e11101e1111110e, 5}    // 9
 };
 
-const icon_t ICACHE_RODATA_ATTR character[] =
+const icon_t ICACHE_RODATA_ATTR character_arr[] =
 {
   {0x00180018183c3c18, 8},   // !
   {0x001800183060663c, 8},   // ?

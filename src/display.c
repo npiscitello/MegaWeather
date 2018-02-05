@@ -9,10 +9,10 @@
 #define SCREEN_HEIGHT 8
 #define SCREEN_WIDTH 8
 
-// global variables are gross, but this one is necessary - stores the current state of the screen
-// otherwise, the user would have to keep track of what's on the screen manually
-// uses a bit of memory, but I think we can spare it for convenience
-// this could be just a uint64_t, but using the icon struct allows us to easily change the way icon
+// Global variables are gross, but this one is necessary - stores the current state of the screen.
+// Otherwise, the user would have to keep track of what's on the screen manually.
+// It uses a bit of memory, but I think we can spare it for convenience.
+// This could be just a uint64_t, but using the icon struct allows us to easily change the way icon
 // storage is implemented in graphics.h if needed
 icon_t cur_screen = {0, 8};
 
@@ -46,14 +46,11 @@ transition_t internal_trans;
  * trans: a struct defining the transition
  */
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw );
-void ICACHE_FLASH_ATTR execute_transition(transition_t trans) {
-  internal_trans = trans;
-  internal_trans.frame_delay = 75;
-
-  os_timer_setfn(&trans_timer, (os_timer_func_t*)transition_loop, &internal_trans);
-  os_timer_arm(&trans_timer, internal_trans.frame_delay, 1);
-  transition_loop((void*)&internal_trans);
-
+void ICACHE_FLASH_ATTR update_screen( const icon_t image );
+void ICACHE_FLASH_ATTR execute_transition() {
+  //icon_t test_icon = {0xFFFFFFFFFFFFFFFF, 8};
+  //update_screen(test_icon);
+  update_screen(image_arr[SNOW]);
   return;
 }
 
@@ -97,7 +94,6 @@ void ICACHE_FLASH_ATTR display_init() {
     spi.mode = SpiMode_Master;
     // clock inactive low (CPOL 0), data on leading edge (CPHA 0)
     spi.subMode = SpiSubMode_0;
-    // MAX7221 has a 10MHz interface, but we're gonna keep it slower until we know it works
     spi.speed = SpiSpeed_10MHz;
     spi.bitOrder = SpiBitOrder_MSBFirst;
   SPIInit(SpiNum_HSPI, &spi);
@@ -158,22 +154,19 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
   // This takes more time and memory, but it allows us to keep the cur_screen var updated.
   // Basically, I'm striving for screen state changes to be as atomic as possible, in that the state
   // is always known internally so the user doesn't have to worry about interrupting operations.
-  //if( frame <= data->space + data->icon.width ) {
-  if( frame <= data->space + data->icon.width ) {
+  icon_t next_frame;
+  next_frame.width = SCREEN_WIDTH;
+  for( uint8_t i = 0; i < SCREEN_HEIGHT; i++ ) {
+    // treat the 64 bit numbers like an 8 member uint8_t array
+    // shifts are 'backwards' because the MSB corresponds to the leftmost column and the LSB
+    // corresponds to the rightmost column
+    ((uint8_t*)&(next_frame.icon))[i] = 
+      ((uint8_t*)&cur_screen)[i] >> 1 |
+      ((uint8_t*)&data->icon)[i] << (SCREEN_WIDTH + data->space - frame);
+  }
+  update_screen(next_frame);
 
-    icon_t next_frame;
-    next_frame.width = SCREEN_WIDTH;
-    for( uint8_t i = 0; i < SCREEN_HEIGHT; i++ ) {
-      // treat the 64 bit numbers like an 8 member uint8_t array
-      // shifts are 'backwards' because the MSB corresponds to the leftmost column and the LSB
-      // corresponds to the rightmost column
-      ((uint8_t*)&(next_frame.icon))[i] = 
-        ((uint8_t*)&cur_screen)[i] >> 1 |
-        ((uint8_t*)&data->icon)[i] << (SCREEN_WIDTH + data->space - frame);
-    }
-    update_screen(next_frame);
-
-  } else {
+  if( frame == data->space + data->icon.width ) {
     // we've finished the transition!
     os_timer_disarm(&trans_timer);
     frame = 0;

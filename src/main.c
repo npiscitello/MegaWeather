@@ -8,18 +8,12 @@
 
 // blink timers
 static volatile os_timer_t change_timer;
-#define PERIOD 2100
+#define PERIOD 1500
 
 void ICACHE_FLASH_ATTR disp_image(void *arg) {
   (void)arg;
-
-  transition_t trans;
-    trans.icon = icon[M_CLOUD];
-    trans.frame_delay = 100;
-    trans.space = 5;
-    trans.instant = false;
-
-  execute_transition(trans);
+  execute_transition();
+  //update_screen(image_arr[SNOW]);
 }
 
 void ICACHE_FLASH_ATTR user_init() {
@@ -28,5 +22,4 @@ void ICACHE_FLASH_ATTR user_init() {
   // setup timers
   os_timer_setfn(&change_timer, (os_timer_func_t *)disp_image, NULL);
   os_timer_arm(&change_timer, PERIOD, 1);
-
 }

@@ -6,9 +6,6 @@
 #include "graphics.h"
 #include <os_type.h>
 
-// <TODO> remove me!
-void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw );
-
 // defines a transition from one image to another
 struct transition_struct{
   icon_t icon;              // new icon to be shown
@@ -21,6 +18,12 @@ struct transition_struct{
   uint8_t bool3         :1;
 };
 typedef struct transition_struct transition_t;
+
+
+
+/* FOR TESTING - execute a transition
+ */
+void execute_transition();
 
 
 
