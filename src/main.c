@@ -9,20 +9,19 @@
 // blink timers
 static volatile os_timer_t change_timer;
 //#define PERIOD 2100
-#define PERIOD 2600
+#define PERIOD 2750
 
 void ICACHE_FLASH_ATTR disp_image(void *arg) {
   (void)arg;
 
   transition_t trans;
-  trans.frame_delay = 100;
-
+  trans.frame_delay = 75;
+  trans.instant = false;
   trans.space = 1;
-  trans.instant = true;
+
   trans.icon = digit[0];
   add_to_queue( &trans );
 
-  trans.instant = false;
   trans.icon = digit[1];
   add_to_queue( &trans );
 
