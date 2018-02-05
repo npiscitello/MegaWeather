@@ -3,7 +3,6 @@
 #include "driver/spi_interface.h"
 
 #include "display.h"
-#include "graphics.h"
 
 // actual pixel dimensions of the LED array
 #define SCREEN_HEIGHT 8
@@ -45,11 +44,10 @@ transition_t internal_trans;
 /* execute a single transition
  * trans: a struct defining the transition
  */
-void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw );
-void ICACHE_FLASH_ATTR update_screen( const icon_t image );
+void update_screen( const icon_t image );
 void ICACHE_FLASH_ATTR execute_transition() {
-  //icon_t test_icon = {0xFFFFFFFFFFFFFFFF, 8};
-  //update_screen(test_icon);
+  icon_t test_icon = {0xFFFFFFFFFFFFFFFF, 8};
+  update_screen(test_icon);
   update_screen(image_arr[SNOW]);
   return;
 }
@@ -132,6 +130,7 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
   cur_screen = image;
   return;
 }
+
 
 
 
