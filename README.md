@@ -83,9 +83,8 @@ command in the Makefile accordingly.
 Compiler: custom built, see [Setup Linux Toolchain from Scratch](
 https://docs.espressif.com/projects/esp-idf/en/latest/get-started/linux-setup-scratch.html)
 in the espressif docs. Also see the 
-[CrosstoolNG port](https://github.com/espressif/crosstool-NG/tree/esp8266-1.22.x) 
-(don't forget the submodules if you `git clone`!). You want the esp8266 branch 
-and the xtensa lx106 config (in samples). See the official crosstoolNG docs if 
+[CrosstoolNG port](https://github.com/espressif/crosstool-NG/tree/esp8266-1.22.x). You want
+the esp8266 branch and the xtensa lx106 config (in samples). See the official crosstoolNG docs if 
 you need help configuring; it should be as simple as `./ct-ng xtensa-lx106-elf` 
 and `./ct-ng build`, but your mileage may vary 🤷‍♀️
 
@@ -94,6 +93,7 @@ SDK:
  make sure you're using the `release/2.2.x` branch; this project is not written
  for the 3.0 SDK. You **must** set the environment variable `ESP8266_NONOS_SDK`
  to the root directory of the SDK repo; the Makefile and `.ycm_extra_conf.py`
- depend on it.
+ depend on it. I know this is a super old version of the SDK; for now, I don't
+ feel like updating the code to use 3.0 or the RTOS.
 
 Uploader: [esptool](https://github.com/espressif/esptool)
