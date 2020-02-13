@@ -78,7 +78,22 @@ command in the Makefile accordingly.
   * Should users be able to add to the queue while its executing? Should they be able to clear it?
     Clearing the queue during execution serves effectively as cancelling the execution...
 
-## API
-This project proudly uses the [WeatherUnderground](https://www.wunderground.com) API.
+# ESP8266 Toolchain
 
-![wunderground logo](https://icons.wxug.com/logos/PNG/wundergroundLogo_4c_horz.png)
+Compiler: custom built, see [Setup Linux Toolchain from Scratch](
+https://docs.espressif.com/projects/esp-idf/en/latest/get-started/linux-setup-scratch.html)
+in the espressif docs. Also see the 
+[CrosstoolNG port](https://github.com/espressif/crosstool-NG) (don't forget the
+submodules if you `git clone`!). You want the esp8266 branch and the xtensa
+lx106 config (in samples). See the official crosstoolNG docs if you need help
+configuring; building should be as simple as `./ct-ng xtensa-lx106-elf` and
+`./ct-ng build`, but your mileage may vary 🤷‍♀️
+
+SDK:
+[ESP8266_NONOS_SDK](https://github.com/espressif/ESP8266_NONOS_SDK/tree/release/v2.2.x) -
+ make sure you're using the `release/2.2.x` branch; this project is not written
+ for the 3.0 SDK. You **must** set the environment variable `ESP8266_NONOS_SDK`
+ to the root directory of the SDK repo; the Makefile and `.ycm_extra_conf.py`
+ depend on it.
+
+Uploader: [esptool](https://github.com/espressif/esptool)

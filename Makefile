@@ -1,13 +1,14 @@
 CC 				:= 	xtensa-lx106-elf-gcc
 CFLAGS 		:= 	-Iinclude \
 							-Ilib/ESP8266_SPI_Driver/include \
+							-I$(ESP8266_NONOS_SDK)/include \
 							-DICACHE_FLASH \
 							-mlongcalls \
 							-std=c99 \
 							-Wno-implicit-function-declaration
 
-LDLIBS 		:= 	-nostdlib -Wl,--start-group -lmain -lnet80211 -lwpa -llwip -lpp -lphy -ldriver -lc -Wl,--end-group -lgcc
-LDFLAGS 	:= 	-Teagle.app.v6.ld
+LDLIBS 		:= 	-nostdlib -Wl,--start-group -lmain -lnet80211 -lwpa -llwip -lpp -lphy -ldriver -lc -Wl,--end-group -lgcc -lcrypto
+LDFLAGS 	:= 	-L$(ESP8266_NONOS_SDK)/lib -T$(ESP8266_NONOS_SDK)/ld/eagle.app.v6.ld
 
 SRC_DIR 	:=	src
 BUILD_DIR := 	build
