@@ -41,27 +41,13 @@ A simple ESP8266 based weather station to display current and future weather sta
 This project has officially moved to the ESP8266 platform (specifically the dev breakout board from
 SparkFun).
 
-AVR details:
-I use a USBtinyISP (https://www.adafruit.com/products/46) to program the chip; any other ISP should
-work (as long as the avrdude command in the Makefile is updated to reflect the change). `make 
-program` should build `main.hex` with intermediate files and send it to the chip. If you have the
-ATMEGA328 in your avrdude.conf, this will also work with that chip - just modify the `avrdude`
-command in the Makefile accordingly.
-
 ## Notes
-
-* The ESP8266 SPI library is **not mine**! It was researched and built by David Ogilvy (aka 
-  MetalPhreak), who did a *very* nice job with it! Check inside the lib folder for more
-  information, including a link to his blog!
 
 * See [xantorohara's project](https://github.com/xantorohara/led-matrix-editor) for a really cool
   browser-based tool for 8x8 matrix planning. Use the following address to access the
   tool with the weather icons pre-loaded!
 
       http://xantorohara.github.io/led-matrix-editor/#3c4299bdbd99423c|30180c0e0e0c1830|0000007e8181621c|0000007ed5ab761c|0000007effff7e1c|8452087effff7e1c|a524e71818e724a5|7e01e61060fc020c|aa55aa55aa55aa55
-
-* ~~This will probably not be ATMEGA328P based forever; I'm looking at the ESP8266 as a (tiny!)
-  single-chip solution~~ See above; the platform changeover is done.
 
 * Pin mapping: since the LED cathodes in the TC15-11EWA that I'm using are on the columns, and the
   MAX72XX chips are common cathode drivers, we write the display in columns instead of the more
@@ -79,21 +65,7 @@ command in the Makefile accordingly.
     Clearing the queue during execution serves effectively as cancelling the execution...
 
 # ESP8266 Toolchain
-
-Compiler: custom built, see [Setup Linux Toolchain from Scratch](
-https://docs.espressif.com/projects/esp-idf/en/latest/get-started/linux-setup-scratch.html)
-in the espressif docs. Also see the 
-[CrosstoolNG port](https://github.com/espressif/crosstool-NG/tree/esp8266-1.22.x). You want
-the esp8266 branch and the xtensa lx106 config (in samples). See the official crosstoolNG docs if 
-you need help configuring; it should be as simple as `./ct-ng xtensa-lx106-elf` 
-and `./ct-ng build`, but your mileage may vary 🤷‍♀️
-
-SDK:
-[ESP8266_NONOS_SDK](https://github.com/espressif/ESP8266_NONOS_SDK/tree/release/v2.2.x) -
- make sure you're using the `release/2.2.x` branch; this project is not written
- for the 3.0 SDK. You **must** set the environment variable `ESP8266_NONOS_SDK`
- to the root directory of the SDK repo; the Makefile and `.ycm_extra_conf.py`
- depend on it. I know this is a super old version of the SDK; for now, I don't
- feel like updating the code to use 3.0 or the RTOS.
-
-Uploader: [esptool](https://github.com/espressif/esptool)
+[ESP8266_RTOS_SDK](https://github.com/espressif/ESP8266_RTOS_SDK) - I'm biting the bullet and going
+whole-hog into the recommended most up-to-date SDK from espressif. I expect this to change a LOT of
+the code; we're hopping into a full OS from the NONOS SDK and it's the new version. Hopefully we can
+get this working again! Installation and usage instructions are in the repo.
