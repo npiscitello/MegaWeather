@@ -69,3 +69,6 @@ SparkFun).
 whole-hog into the recommended most up-to-date SDK from espressif. I expect this to change a LOT of
 the code; we're hopping into a full OS from the NONOS SDK and it's the new version. Hopefully we can
 get this working again! Installation and usage instructions are in the repo.
+
+*NOTE*: Make sure the environment variable `IDF_PATH` points to the root of the SDK dir - lots of
+stuff (namely `.ycm_extra_conf.py` and the `Makefile`) depend on it!
