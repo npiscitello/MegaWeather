@@ -1,6 +1,12 @@
 #ifndef DISPLAY_H
 #define DISPLAY_H
 
+#define DISABLED
+
+#ifdef DISABLED
+void helloworld();
+#else
+
 // it hurts a little bit to have to #include so much in a header...
 #include "c_types.h"
 #include "graphics.h"
@@ -68,4 +74,5 @@ void clear_queue();
  */
 uint8_t queue_executing();
 
+#endif
 #endif

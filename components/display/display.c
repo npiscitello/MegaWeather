@@ -1,3 +1,12 @@
+#define DISABLED
+
+#ifdef DISABLED
+#include <stdio.h>
+void helloworld() {
+  printf("Hello world\n");
+}
+#else
+ 
 #include "osapi.h"
 #include "driver/spi.h"
 
@@ -211,3 +220,4 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
     queue_helper();
   }
 }
+#endif
