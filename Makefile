@@ -3,7 +3,7 @@
 # project subdirectory.
 #
 
-PROJECT_NAME := esp_skeleton
+PROJECT_NAME := megaweather
 
 include $(IDF_PATH)/make/project.mk
 

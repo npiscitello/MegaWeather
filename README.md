@@ -57,8 +57,8 @@ SparkFun).
     * R1 = DP, R2 = A, R3 = B, R4 = C, R5 = D, R6 = E, R7 = F, R8 = G
     * C1 = D0, C2 = D1, C3 = D2, C4 = D3, C5 = D4, C6 = D5, C7 = D6, C8 = D7
 
-* Looking for simple example code for the ESP8266? Check out my [other
-  repo](https://github.com/npiscitello/esp8266_resources).
+* Use [compiledb](https://pypi.org/project/compiledb/) to create a `compile_commands.json` for YCM
+  to read. Run `compiledb make`, it doesn't like multithreaded builds!
 
 * TODO:
   * Should users be able to add to the queue while its executing? Should they be able to clear it?
@@ -71,4 +71,4 @@ the code; we're hopping into a full OS from the NONOS SDK and it's the new versi
 get this working again! Installation and usage instructions are in the repo.
 
 *NOTE*: Make sure the environment variable `IDF_PATH` points to the root of the SDK dir - lots of
-stuff (namely `.ycm_extra_conf.py` and the `Makefile`) depend on it!
+stuff (namely the `Makefile` and espressif's whole dev framework) depend on it!
