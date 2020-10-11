@@ -1,14 +1,14 @@
-#define DISABLED
-
-#ifdef DISABLED
 #include <stdio.h>
-void helloworld() {
-  printf("Hello world\n");
-}
-#else
- 
-#include "osapi.h"
+
+#include <stdbool.h>
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "esp_attr.h"
+#include "driver/gpio.h"
 #include "driver/spi.h"
+#include "driver/hw_timer.h"
+
 
 #include "display.h"
 #include "graphics.h"
@@ -50,6 +50,7 @@ struct transition_queue {
   uint8_t current_index;                            // which item we're executing
 } queue;
 
+/*
 // the timer to drive a transition
 static volatile os_timer_t trans_timer;
 
@@ -125,6 +126,7 @@ void ICACHE_FLASH_ATTR execute_queue() {
 uint8_t ICACHE_FLASH_ATTR queue_executing() {
   return mutex.queue;
 }
+*/
 
 
 
@@ -134,21 +136,89 @@ uint8_t ICACHE_FLASH_ATTR queue_executing() {
  * chip; there's nothing much going on down here logic-wise.
  */
 
+/* SPI RTOS Scheduling Theory
+ * <TODO> right now, SPI is blocking. Use the below scheduling details to
+ * implement non-blocking SPI!
+ *
+ * schedule SPI task as a fairly high priority (priorities are 1-11, lower
+ * numbers being less important) - shifting to the display is the most important
+ * thing we do, this being a smart display and all. We use the semaphore to tell
+ * the OS that there's SPI data ready to write out and it should give SPI some
+ * processor time.
+ *
+ * SPI will also supposedly spit out "events" (ISRs) when it starts sending and
+ * finishes sending data (according to itr_enable). Maybe these are useful?
+ */
+
+// semaphore for locking SPI while a transmit is happening
+SemaphoreHandle_t sem_spi_transmit = NULL;
+
+// catch SPI events
+void spi_event_callabck(int event, void *arg) {
+  // do stuff? Event macros are SPI_X_EVENT, where X is:
+  // INIT, TRANS_START, TRANS_DONE, DEINIT
+  switch( event ) {
+    case SPI_INIT_EVENT:
+      printf("[disp] SPI initialized\n");
+      //xSemaphoreGiveFromISR(sem_spi_transmit, NULL);
+      break;
+    case SPI_TRANS_START_EVENT:
+      printf("[disp] SPI transmission started\n");
+      break;
+    case SPI_TRANS_DONE_EVENT:
+      printf("[disp] SPI transmission ended\n");
+      //xSemaphoreGiveFromISR(sem_spi_transmit, NULL);
+      break;
+    case SPI_DEINIT_EVENT:
+      printf("[disp] SPI deinitialized\n");
+      break;
+  }
+}
+
 // transmit a register/data pair
-#define spi_transmit(ADDR, DATA) spi_transaction(HSPI, 0, 0, 8, ADDR, 8, DATA, 0, 0);
+//#define spi_transmit(ADDR, DATA) spi_transaction(HSPI, 0, 0, 8, ADDR, 8, DATA, 0, 0);
+void spi_transmit(uint8_t addr, uint8_t data) {
+  spi_trans_t spi_packet;
+
+  uint32_t addr_cpy = addr;
+  uint32_t data_cpy = data;
+
+  spi_packet.bits.addr = sizeof(addr) * 8;
+  spi_packet.addr = &addr_cpy;
+  spi_packet.bits.mosi = sizeof(data) * 8;
+  spi_packet.mosi = &data_cpy;
+
+  spi_packet.bits.cmd = 0;
+  spi_packet.bits.miso = 0;
+
+  //xSemaphoreTake(sem_spi_transmit, 1 * portTICK_PERIOD_MS);
+  xSemaphoreTake(sem_spi_transmit, 0);
+  spi_trans(HSPI_HOST, &spi_packet);
+}
 
 // set up the screen and other variables for first use
 void ICACHE_FLASH_ATTR display_init() {
-
   // init the queue
   queue.length = 0;
   queue.current_index = 0;
 
-  // use the external (not-flash) pins
-  spi_init(HSPI);
+  // set up the SPI transmit semaphore
+  sem_spi_transmit = xSemaphoreCreateBinary();
 
-  // valid data on clock leading edge, clock is low when inactive
-  spi_mode(HSPI, 0, 0);
+  // configure SPI
+  spi_config_t spi_config_data;
+  // CS_EN:1, MISO_EN:1, MOSI_EN:1, BYTE_TX_ORDER:1, BYTE_TX_ORDER:1,
+  // BIT_RX_ORDER:0, BIT_TX_ORDER:0, CPHA:0, CPOL:0
+  spi_config_data.interface.val = SPI_DEFAULT_INTERFACE;
+  // TRANS_DONE: true, WRITE_STATUS: false, READ_STATUS: false,
+  // WRITE_BUFFER: false, READ_BUFFER: false
+  spi_config_data.intr_enable.val = SPI_MASTER_DEFAULT_INTR_ENABLE;
+  spi_config_data.mode = SPI_MASTER_MODE;
+  spi_config_data.clk_div = SPI_2MHz_DIV;
+  spi_config_data.event_cb = spi_event_callabck;
+
+  // use the external (not-flash) pins
+  spi_init(HSPI_HOST, &spi_config_data);
 
   // setup for the MAX7221 chip (through a TXB0104 level shifter)
   // don't use the decode table
@@ -184,6 +254,7 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
 
 
 
+/*
 // this is the actual transition "loop", which is really just a nonblocking timer function
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
   transition_t *data = (transition_t *)tdata_raw;
@@ -220,4 +291,4 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
     queue_helper();
   }
 }
-#endif
+*/

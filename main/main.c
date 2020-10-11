@@ -1,18 +1,32 @@
 #include <stdio.h>
+
+#include "display.h"
+#include "graphics.h"
+
+void app_main() {
+  // init spi
+  printf("[main] pre display_init\n");
+  display_init();
+  // push something to the screen
+  printf("[main] post display_init, pre update_screen\n");
+  update_screen(character[QUESTION]);
+  // ...that's all folks!
+  printf("[main] post update_screen\n");
+}
+
+/*
+
+#include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
 #include "esp_spi_flash.h"
 
-#include "display.h"
-
-
 void app_main()
 {
-    //printf("Hello world!\n");
-    helloworld();
+    printf("Hello world!\n");
 
-    /* Print chip information */
+    // Print chip information
     esp_chip_info_t chip_info;
     esp_chip_info(&chip_info);
     printf("This is ESP8266 chip with %d CPU cores, WiFi, ",
@@ -20,7 +34,7 @@ void app_main()
 
     printf("silicon revision %d, ", chip_info.revision);
 
-    printf("%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
+    printf("%dMB %s flash\n", (int)spi_flash_get_chip_size() / (1024 * 1024),
             (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
     for (int i = 10; i >= 0; i--) {
@@ -31,6 +45,7 @@ void app_main()
     fflush(stdout);
     esp_restart();
 }
+*/
 
 /*
 #include "ets_sys.h"

@@ -1,9 +1,5 @@
-#define DISABLED
-
-#ifdef DISABLED
-#else
-
 #include "graphics.h"
+#include "esp_attr.h"
 
 // weather icons as noted - some stolen shamelessly from
 // https://electricimp.com/docs/learning/weather/
@@ -45,5 +41,3 @@ const icon_t ICACHE_RODATA_ATTR character[] =
   {0x0000000f00000000, 4},   // -
   {0x0000000000000303, 8}    // degrees
 };
-
-#endif

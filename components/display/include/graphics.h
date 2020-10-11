@@ -1,7 +1,7 @@
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 
-#include "c_types.h"
+#include <stdint.h>
 
 // the struct defining an icon
 struct icon_t {
