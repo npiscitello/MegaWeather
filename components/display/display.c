@@ -5,6 +5,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "freertos/task.h"
 #include "esp_attr.h"
 #include "driver/gpio.h"
 #include "driver/spi.h"
@@ -215,9 +216,6 @@ void ICACHE_FLASH_ATTR display_init() {
 
   // configure SPI
   spi_config_t spi_config_data;
-  // CS_EN:1, MISO_EN:1, MOSI_EN:1, BYTE_TX_ORDER:1, BYTE_TX_ORDER:1,
-  // BIT_RX_ORDER:0, BIT_TX_ORDER:0, CPHA:0, CPOL:0
-  //spi_config_data.interface.val = SPI_DEFAULT_INTERFACE;
   spi_config_data.interface.cs_en = 1;
   spi_config_data.interface.mosi_en = 1;
   spi_config_data.interface.miso_en = 0;
@@ -227,6 +225,7 @@ void ICACHE_FLASH_ATTR display_init() {
   spi_config_data.interface.bit_tx_order = 0;
   spi_config_data.interface.cpha = 0;
   spi_config_data.interface.cpol = 0;
+  // disable all interrupts except trans_done
   spi_config_data.intr_enable.val = 0;
   spi_config_data.intr_enable.trans_done = 1;
   spi_config_data.mode = SPI_MASTER_MODE;
@@ -236,28 +235,34 @@ void ICACHE_FLASH_ATTR display_init() {
   // use the external (not-flash) pins
   spi_init(HSPI_HOST, &spi_config_data);
 
+  // <TODO> DEBUG display test mode, single transmission
+  spi_transmit(0x0F, 0x00);
+  vTaskDelay(10 / portTICK_PERIOD_MS);
+  spi_transmit(0x0F, 0x00);
+
+  /*
   // setup for the MAX7221 chip (through a TXB0104 level shifter)
-  // <TODO> DEBUG ONLY - display test mode
-  //spi_transmit(0x0F, 0x01);
+  // don't assume we're on a clean startup of the chip
+  // put the chip into shutdown
+  spi_transmit(0x0C, 0x00);
+  // take out of display test mode
   spi_transmit(0x0F, 0x00);
   // don't use the decode table
   spi_transmit(0x09, 0x00);
   // set intensity to middle ground
-  spi_transmit(0x0A, 0x08);
+  display_brightness(0x08);
   // scan across all digits
   spi_transmit(0x0b, 0x07);
-  // turn off all pixels - I could use update_screen for this, but I don't need the fancy shifting
-  // I'll probably start using it if I need to worry about mutexes
-  for( uint8_t i = 0x01; i <= 0x08; i++ ) {
-    spi_transmit(i, 0x00);
-  }
+  // turn off all pixels
+  update_screen(character[BLANK]);
   // take the chip out of shutdown
   spi_transmit(0x0C, 0x01);
+  */
 }
 
 // change the software-defined display brightness
 void ICACHE_FLASH_ATTR display_brightness( uint8_t brightness ) {
-  spi_transmit(0x0A, brightness);
+  //spi_transmit(0x0A, brightness);
 }
 
 // update the whole screen in one shot
@@ -266,7 +271,7 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
     // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
     // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
-    spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
+    //spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
   }
   cur_screen = image;
 }
