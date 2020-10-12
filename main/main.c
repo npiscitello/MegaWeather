@@ -3,7 +3,22 @@
 #include "display.h"
 #include "graphics.h"
 
+#include "driver/gpio.h"
+
 void app_main() {
+  gpio_config_t gpio_config_data;
+  gpio_config_data.pin_bit_mask = GPIO_Pin_15 | GPIO_Pin_5;
+  gpio_config_data.mode = GPIO_MODE_OUTPUT;
+  gpio_config_data.pull_up_en = GPIO_PULLUP_DISABLE;
+  gpio_config_data.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  gpio_config_data.intr_type = GPIO_INTR_DISABLE;
+  gpio_config(&gpio_config_data);
+
+  gpio_set_level(GPIO_NUM_15, 1);
+  gpio_set_level(GPIO_NUM_5, 0);
+}
+
+/*
   // init spi
   printf("[main] pre display_init\n");
   display_init();
@@ -13,6 +28,7 @@ void app_main() {
   // ...that's all folks!
   printf("[main] post update_screen\n");
 }
+*/
 
 /*
 
