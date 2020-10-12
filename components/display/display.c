@@ -151,10 +151,10 @@ uint8_t ICACHE_FLASH_ATTR queue_executing() {
  */
 
 // semaphore for locking SPI while a transmit is happening
-SemaphoreHandle_t sem_spi_transmit = NULL;
+//SemaphoreHandle_t sem_spi_transmit = NULL;
 
 // catch SPI events
-void spi_event_callabck(int event, void *arg) {
+void spi_event_callback(int event, void *arg) {
   // do stuff? Event macros are SPI_X_EVENT, where X is:
   // INIT, TRANS_START, TRANS_DONE, DEINIT
   switch( event ) {
@@ -183,16 +183,17 @@ void spi_transmit(uint8_t addr, uint8_t data) {
   uint32_t addr_cpy = addr;
   uint32_t data_cpy = data;
 
-  spi_packet.bits.addr = sizeof(addr) * 8;
+  //spi_packet.bits.addr = sizeof(addr) * 8;
+  spi_packet.bits.addr = 8;
   spi_packet.addr = &addr_cpy;
-  spi_packet.bits.mosi = sizeof(data) * 8;
+  //spi_packet.bits.mosi = sizeof(data) * 8;
+  spi_packet.bits.mosi = 8;
   spi_packet.mosi = &data_cpy;
 
   spi_packet.bits.cmd = 0;
   spi_packet.bits.miso = 0;
 
   //xSemaphoreTake(sem_spi_transmit, 1 * portTICK_PERIOD_MS);
-  xSemaphoreTake(sem_spi_transmit, 0);
   spi_trans(HSPI_HOST, &spi_packet);
 }
 
@@ -203,37 +204,51 @@ void ICACHE_FLASH_ATTR display_init() {
   queue.current_index = 0;
 
   // set up the SPI transmit semaphore
-  sem_spi_transmit = xSemaphoreCreateBinary();
+  //sem_spi_transmit = xSemaphoreCreateBinary();
 
   // configure SPI
   spi_config_t spi_config_data;
   // CS_EN:1, MISO_EN:1, MOSI_EN:1, BYTE_TX_ORDER:1, BYTE_TX_ORDER:1,
   // BIT_RX_ORDER:0, BIT_TX_ORDER:0, CPHA:0, CPOL:0
-  spi_config_data.interface.val = SPI_DEFAULT_INTERFACE;
+  //spi_config_data.interface.val = SPI_DEFAULT_INTERFACE;
+  spi_config_data.interface.cs_en = 1;
+  spi_config_data.interface.mosi_en = 1;
+  spi_config_data.interface.miso_en = 0;
+  spi_config_data.interface.byte_tx_order = 1;
+  spi_config_data.interface.bit_tx_order = 0;
+  spi_config_data.interface.cpha = 0;
+  spi_config_data.interface.cpol = 0;
   // TRANS_DONE: true, WRITE_STATUS: false, READ_STATUS: false,
   // WRITE_BUFFER: false, READ_BUFFER: false
-  spi_config_data.intr_enable.val = SPI_MASTER_DEFAULT_INTR_ENABLE;
+  //spi_config_data.intr_enable.val = SPI_MASTER_DEFAULT_INTR_ENABLE;
+  spi_config_data.intr_enable.val = 0;
   spi_config_data.mode = SPI_MASTER_MODE;
   spi_config_data.clk_div = SPI_2MHz_DIV;
-  spi_config_data.event_cb = spi_event_callabck;
+  spi_config_data.event_cb = spi_event_callback;
 
   // use the external (not-flash) pins
   spi_init(HSPI_HOST, &spi_config_data);
 
   // setup for the MAX7221 chip (through a TXB0104 level shifter)
+  // <TODO> DEBUG ONLY - display test mode
+  spi_transmit(0x0F, 0x01);
   // don't use the decode table
-  spi_transmit(0x09, 0x00);
+  //spi_transmit(0x09, 0x00);
   // set intensity to middle ground
-  spi_transmit(0x0A, 0x08);
+  //spi_transmit(0x0A, 0x08);
   // scan across all digits
-  spi_transmit(0x0b, 0x07);
+  //spi_transmit(0x0b, 0x07);
   // turn off all pixels - I could use update_screen for this, but I don't need the fancy shifting
   // I'll probably start using it if I need to worry about mutexes
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
-    spi_transmit(i, 0x00);
+    //spi_transmit(i, 0x00);
   }
   // take the chip out of shutdown
-  spi_transmit(0x0C, 0x01);
+  //spi_transmit(0x0C, 0x01);
+  // <TODO> DEBUG make something show up on the LEDs
+  for( uint8_t i = 0; i < 100; i++ ) {
+    spi_transmit(0xFF, 0xFF);
+  }
 }
 
 // change the software-defined display brightness
@@ -247,7 +262,7 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
     // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
     // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
-    spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
+    //spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
   }
   cur_screen = image;
 }
