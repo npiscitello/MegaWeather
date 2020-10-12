@@ -8,7 +8,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define MAIN_BITBANG
+#define MAIN_SPI
 
 void app_main() {
 

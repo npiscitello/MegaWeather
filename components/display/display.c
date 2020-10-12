@@ -183,8 +183,12 @@ void spi_event_callback(int event, void *arg) {
 void spi_transmit(uint8_t addr, uint8_t data) {
   spi_trans_t spi_packet;
 
-  uint32_t addr_cpy = addr;
-  uint32_t data_cpy = data;
+  // for some reason, the interface only likes to send bytes in reverse order
+  // I'd imagine the byte_order config variable would affect this, but it
+  // doesn't seem to even shift data out on the MOSI line when it's set so
+  // I'll just hack around it I guess...
+  uint32_t addr_cpy = data;
+  uint32_t data_cpy = addr;
 
   //spi_packet.bits.addr = sizeof(addr) * 8;
   spi_packet.bits.addr = 8;
@@ -196,7 +200,7 @@ void spi_transmit(uint8_t addr, uint8_t data) {
   spi_packet.bits.cmd = 0;
   spi_packet.bits.miso = 0;
 
-  xSemaphoreTake(sem_spi_transmit, 10 * portTICK_PERIOD_MS);
+  xSemaphoreTake(sem_spi_transmit, 10 / portTICK_PERIOD_MS);
   spi_trans(HSPI_HOST, &spi_packet);
 }
 
@@ -217,8 +221,10 @@ void ICACHE_FLASH_ATTR display_init() {
   spi_config_data.interface.cs_en = 1;
   spi_config_data.interface.mosi_en = 1;
   spi_config_data.interface.miso_en = 0;
-  spi_config_data.interface.byte_tx_order = 1;
-  spi_config_data.interface.bit_tx_order = 1;
+  // based on experimentation, byte order must be zero
+  // and bit order doesn't matter
+  spi_config_data.interface.byte_tx_order = 0;
+  spi_config_data.interface.bit_tx_order = 0;
   spi_config_data.interface.cpha = 0;
   spi_config_data.interface.cpol = 0;
   spi_config_data.intr_enable.val = 0;
@@ -232,29 +238,26 @@ void ICACHE_FLASH_ATTR display_init() {
 
   // setup for the MAX7221 chip (through a TXB0104 level shifter)
   // <TODO> DEBUG ONLY - display test mode
-  spi_transmit(0x0F, 0x01);
+  //spi_transmit(0x0F, 0x01);
+  spi_transmit(0x0F, 0x00);
   // don't use the decode table
-  //spi_transmit(0x09, 0x00);
+  spi_transmit(0x09, 0x00);
   // set intensity to middle ground
-  //spi_transmit(0x0A, 0x08);
+  spi_transmit(0x0A, 0x08);
   // scan across all digits
-  //spi_transmit(0x0b, 0x07);
+  spi_transmit(0x0b, 0x07);
   // turn off all pixels - I could use update_screen for this, but I don't need the fancy shifting
   // I'll probably start using it if I need to worry about mutexes
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
-    //spi_transmit(i, 0x00);
+    spi_transmit(i, 0x00);
   }
   // take the chip out of shutdown
-  //spi_transmit(0x0C, 0x01);
-  // <TODO> DEBUG blast the test signal
-  for( uint8_t i = 0; i < 100; i++ ) {
-    spi_transmit(0x0F, 0x01);
-  }
+  spi_transmit(0x0C, 0x01);
 }
 
 // change the software-defined display brightness
 void ICACHE_FLASH_ATTR display_brightness( uint8_t brightness ) {
-  //spi_transmit(0x0A, brightness);
+  spi_transmit(0x0A, brightness);
 }
 
 // update the whole screen in one shot
@@ -263,7 +266,7 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
     // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
     // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
-    //spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
+    spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
   }
   cur_screen = image;
 }
