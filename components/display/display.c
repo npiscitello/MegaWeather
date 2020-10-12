@@ -1,4 +1,5 @@
-#include <stdio.h>
+//#include <stdio.h>
+#include "esp_log.h"
 
 #include <stdbool.h>
 
@@ -19,6 +20,8 @@
 
 // how many transitions can be queued at once
 #define MAX_QUEUE_LENGTH 5
+
+static const char *TAG = "disp";
 
 // global variables are gross, but this one is necessary - stores the current state of the screen
 // otherwise, the user would have to keep track of what's on the screen manually
@@ -151,7 +154,7 @@ uint8_t ICACHE_FLASH_ATTR queue_executing() {
  */
 
 // semaphore for locking SPI while a transmit is happening
-//SemaphoreHandle_t sem_spi_transmit = NULL;
+SemaphoreHandle_t sem_spi_transmit = NULL;
 
 // catch SPI events
 void spi_event_callback(int event, void *arg) {
@@ -159,18 +162,18 @@ void spi_event_callback(int event, void *arg) {
   // INIT, TRANS_START, TRANS_DONE, DEINIT
   switch( event ) {
     case SPI_INIT_EVENT:
-      printf("[disp] SPI initialized\n");
-      //xSemaphoreGiveFromISR(sem_spi_transmit, NULL);
+      ESP_LOGI(TAG, "SPI initialized");
+      xSemaphoreGiveFromISR(sem_spi_transmit, NULL);
       break;
     case SPI_TRANS_START_EVENT:
-      printf("[disp] SPI transmission started\n");
+      //ESP_LOGI(TAG, "[disp] SPI transmission started");
       break;
     case SPI_TRANS_DONE_EVENT:
-      printf("[disp] SPI transmission ended\n");
-      //xSemaphoreGiveFromISR(sem_spi_transmit, NULL);
+      //ESP_LOGI(TAG, "[disp] SPI transmission ended");
+      xSemaphoreGiveFromISR(sem_spi_transmit, NULL);
       break;
     case SPI_DEINIT_EVENT:
-      printf("[disp] SPI deinitialized\n");
+      //ESP_LOGI(TAG, "[disp] SPI deinitialized");
       break;
   }
 }
@@ -193,7 +196,7 @@ void spi_transmit(uint8_t addr, uint8_t data) {
   spi_packet.bits.cmd = 0;
   spi_packet.bits.miso = 0;
 
-  //xSemaphoreTake(sem_spi_transmit, 1 * portTICK_PERIOD_MS);
+  xSemaphoreTake(sem_spi_transmit, 10 * portTICK_PERIOD_MS);
   spi_trans(HSPI_HOST, &spi_packet);
 }
 
@@ -204,7 +207,7 @@ void ICACHE_FLASH_ATTR display_init() {
   queue.current_index = 0;
 
   // set up the SPI transmit semaphore
-  //sem_spi_transmit = xSemaphoreCreateBinary();
+  sem_spi_transmit = xSemaphoreCreateBinary();
 
   // configure SPI
   spi_config_t spi_config_data;
@@ -215,13 +218,11 @@ void ICACHE_FLASH_ATTR display_init() {
   spi_config_data.interface.mosi_en = 1;
   spi_config_data.interface.miso_en = 0;
   spi_config_data.interface.byte_tx_order = 1;
-  spi_config_data.interface.bit_tx_order = 0;
+  spi_config_data.interface.bit_tx_order = 1;
   spi_config_data.interface.cpha = 0;
   spi_config_data.interface.cpol = 0;
-  // TRANS_DONE: true, WRITE_STATUS: false, READ_STATUS: false,
-  // WRITE_BUFFER: false, READ_BUFFER: false
-  //spi_config_data.intr_enable.val = SPI_MASTER_DEFAULT_INTR_ENABLE;
   spi_config_data.intr_enable.val = 0;
+  spi_config_data.intr_enable.trans_done = 1;
   spi_config_data.mode = SPI_MASTER_MODE;
   spi_config_data.clk_div = SPI_2MHz_DIV;
   spi_config_data.event_cb = spi_event_callback;
@@ -245,15 +246,15 @@ void ICACHE_FLASH_ATTR display_init() {
   }
   // take the chip out of shutdown
   //spi_transmit(0x0C, 0x01);
-  // <TODO> DEBUG make something show up on the LEDs
+  // <TODO> DEBUG blast the test signal
   for( uint8_t i = 0; i < 100; i++ ) {
-    spi_transmit(0xFF, 0xFF);
+    spi_transmit(0x0F, 0x01);
   }
 }
 
 // change the software-defined display brightness
 void ICACHE_FLASH_ATTR display_brightness( uint8_t brightness ) {
-  spi_transmit(0x0A, brightness);
+  //spi_transmit(0x0A, brightness);
 }
 
 // update the whole screen in one shot

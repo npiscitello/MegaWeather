@@ -5,7 +5,14 @@
 
 #include "driver/gpio.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#define MAIN_BITBANG
+
 void app_main() {
+
+#ifdef MAIN_GPIO
   gpio_config_t gpio_config_data;
   gpio_config_data.pin_bit_mask = GPIO_Pin_15 | GPIO_Pin_5;
   gpio_config_data.mode = GPIO_MODE_OUTPUT;
@@ -16,9 +23,9 @@ void app_main() {
 
   gpio_set_level(GPIO_NUM_15, 1);
   gpio_set_level(GPIO_NUM_5, 0);
-}
+#endif
 
-/*
+#ifdef MAIN_SPI
   // init spi
   printf("[main] pre display_init\n");
   display_init();
@@ -27,8 +34,80 @@ void app_main() {
   update_screen(character[QUESTION]);
   // ...that's all folks!
   printf("[main] post update_screen\n");
+#endif
+
+#ifdef MAIN_BITBANG
+  // 13 = MOSI, 14 = SCK, 15 = CS
+  gpio_config_t gpio_config_data;
+  gpio_config_data.pin_bit_mask = GPIO_Pin_13 | GPIO_Pin_14 | GPIO_Pin_15;
+  gpio_config_data.mode = GPIO_MODE_OUTPUT;
+  gpio_config_data.pull_up_en = GPIO_PULLUP_DISABLE;
+  gpio_config_data.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  gpio_config_data.intr_type = GPIO_INTR_DISABLE;
+  gpio_config(&gpio_config_data);
+
+#define delay vTaskDelay(100/portTICK_PERIOD_MS);
+#define HI_MOSI gpio_set_level(GPIO_NUM_13, 1); delay
+#define LO_MOSI gpio_set_level(GPIO_NUM_13, 0); delay
+#define HI_SCK gpio_set_level(GPIO_NUM_14, 1); delay
+#define LO_SCK gpio_set_level(GPIO_NUM_14, 0); delay
+#define HI_CS gpio_set_level(GPIO_NUM_15, 1); delay
+#define LO_CS gpio_set_level(GPIO_NUM_15, 0); delay
+
+  // screw it, let's do it the hard way
+  LO_MOSI;
+  LO_SCK;
+  HI_CS;
+  // 13 = MOSI, 14 = SCK, 15 = CS
+  // listen up MAX7219...
+  LO_CS;
+
+  // ...I wanna talk to address 0x0F...
+  LO_MOSI;
+  HI_SCK;
+  LO_SCK;
+  HI_SCK;
+  LO_SCK;
+  HI_SCK;
+  LO_SCK;
+  HI_SCK;
+  LO_SCK;
+  HI_MOSI;
+  HI_SCK;
+  LO_SCK;
+  HI_SCK;
+  LO_SCK;
+  HI_SCK;
+  LO_SCK;
+  HI_SCK;
+  LO_SCK;
+
+  // ...and I wanna set it to 0x01...
+  LO_MOSI;
+  HI_SCK;
+  LO_SCK;
+  HI_SCK;
+  LO_SCK;
+  HI_SCK;
+  LO_SCK;
+  HI_SCK;
+  LO_SCK;
+  HI_SCK;
+  LO_SCK;
+  HI_SCK;
+  LO_SCK;
+  HI_SCK;
+  LO_SCK;
+  HI_MOSI;
+  HI_SCK;
+  LO_SCK;
+
+  // ...and that's final!
+  HI_CS;
+
+#endif
+
 }
-*/
 
 /*
 
