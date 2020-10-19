@@ -184,6 +184,7 @@ void spi_event_callback(int event, void *arg) {
 void spi_transmit(uint8_t addr, uint8_t data) {
   spi_trans_t spi_packet;
 
+  /*
   // for some reason, the interface only likes to send bytes in reverse order
   // I'd imagine the byte_order config variable would affect this, but it
   // doesn't seem to even shift data out on the MOSI line when it's set so
@@ -202,6 +203,83 @@ void spi_transmit(uint8_t addr, uint8_t data) {
   spi_packet.bits.miso = 0;
 
   xSemaphoreTake(sem_spi_transmit, 10 / portTICK_PERIOD_MS);
+  spi_trans(HSPI_HOST, &spi_packet);
+  */
+
+  // yay, I have a logic analyzer now! Lets see what this does!
+  uint16_t buf_cmd = 0x0000;
+  uint32_t buf_addr = 0x00000000;
+  uint32_t buf_mosi = 0x00000000;
+  spi_packet.cmd = &buf_cmd;
+  spi_packet.bits.miso = 0;
+  spi_packet.addr = &buf_addr;
+  spi_packet.mosi = &buf_mosi;
+
+  buf_cmd = 0x12;
+  spi_packet.bits.cmd = 8;
+  spi_packet.bits.addr = 0;
+  spi_packet.bits.mosi = 0;
+  //spi_packet.cmd = &buf_cmd;
+  spi_trans(HSPI_HOST, &spi_packet);
+
+  buf_addr = (0x34 << 24);
+  spi_packet.bits.cmd = 0;
+  spi_packet.bits.addr = 8;
+  spi_packet.bits.mosi = 0;
+  //spi_packet.addr = &buf_addr;
+  spi_trans(HSPI_HOST, &spi_packet);
+
+  buf_mosi = 0x56;
+  spi_packet.bits.cmd = 0;
+  spi_packet.bits.addr = 0;
+  spi_packet.bits.mosi = 8;
+  //spi_packet.mosi = &buf_mosi;
+  spi_trans(HSPI_HOST, &spi_packet);
+
+  buf_cmd = 0x78;
+  buf_addr = (0x9A << 24);
+  spi_packet.bits.cmd = 8;
+  spi_packet.bits.addr = 8;
+  spi_packet.bits.mosi = 0;
+  //spi_packet.cmd = &buf_cmd;
+  //spi_packet.addr = &buf_addr;
+  spi_trans(HSPI_HOST, &spi_packet);
+
+  buf_cmd = 0xBC;
+  buf_mosi = 0xDE;
+  spi_packet.bits.cmd = 8;
+  spi_packet.bits.addr = 0;
+  spi_packet.bits.mosi = 8;
+  //spi_packet.cmd = &buf_cmd;
+  //spi_packet.mosi = &buf_mosi;
+  spi_trans(HSPI_HOST, &spi_packet);
+
+  buf_addr= (0x13 << 24);
+  buf_mosi = 0x24;
+  spi_packet.bits.cmd = 0;
+  spi_packet.bits.addr = 8;
+  spi_packet.bits.mosi = 8;
+  //spi_packet.addr = &buf_addr;
+  //spi_packet.mosi = &buf_mosi;
+  spi_trans(HSPI_HOST, &spi_packet);
+
+  buf_cmd = 0x35;
+  buf_addr = (0x46 << 24);
+  buf_mosi = 0x57;
+  spi_packet.bits.cmd = 8;
+  spi_packet.bits.addr = 8;
+  spi_packet.bits.mosi = 8;
+  //spi_packet.cmd = &buf_cmd;
+  //spi_packet.addr = &buf_addr;
+  //spi_packet.mosi = &buf_mosi;
+  spi_trans(HSPI_HOST, &spi_packet);
+
+  // this should put the chip into test mode
+  buf_cmd = 0x0F;
+  buf_mosi = 0x01;
+  spi_packet.bits.cmd = 8;
+  spi_packet.bits.addr = 0;
+  spi_packet.bits.mosi = 8;
   spi_trans(HSPI_HOST, &spi_packet);
 }
 
