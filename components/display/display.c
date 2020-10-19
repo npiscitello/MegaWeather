@@ -154,9 +154,6 @@ uint8_t ICACHE_FLASH_ATTR queue_executing() {
  * finishes sending data (according to itr_enable). Maybe these are useful?
  */
 
-// semaphore for locking SPI while a transmit is happening
-SemaphoreHandle_t sem_spi_transmit = NULL;
-
 // catch SPI events
 void spi_event_callback(int event, void *arg) {
   // do stuff? Event macros are SPI_X_EVENT, where X is:
@@ -164,14 +161,12 @@ void spi_event_callback(int event, void *arg) {
   switch( event ) {
     case SPI_INIT_EVENT:
       ESP_LOGI(TAG, "SPI initialized");
-      xSemaphoreGiveFromISR(sem_spi_transmit, NULL);
       break;
     case SPI_TRANS_START_EVENT:
       //ESP_LOGI(TAG, "[disp] SPI transmission started");
       break;
     case SPI_TRANS_DONE_EVENT:
       //ESP_LOGI(TAG, "[disp] SPI transmission ended");
-      xSemaphoreGiveFromISR(sem_spi_transmit, NULL);
       break;
     case SPI_DEINIT_EVENT:
       //ESP_LOGI(TAG, "[disp] SPI deinitialized");
@@ -180,106 +175,23 @@ void spi_event_callback(int event, void *arg) {
 }
 
 // transmit a register/data pair
-//#define spi_transmit(ADDR, DATA) spi_transaction(HSPI, 0, 0, 8, ADDR, 8, DATA, 0, 0);
 void spi_transmit(uint8_t addr, uint8_t data) {
   spi_trans_t spi_packet;
 
-  /*
-  // for some reason, the interface only likes to send bytes in reverse order
-  // I'd imagine the byte_order config variable would affect this, but it
-  // doesn't seem to even shift data out on the MOSI line when it's set so
-  // I'll just hack around it I guess...
-  uint32_t addr_cpy = data;
-  uint32_t data_cpy = addr;
+  uint16_t addr_cpy = addr;
+  uint32_t data_cpy = data;
 
-  //spi_packet.bits.addr = sizeof(addr) * 8;
-  spi_packet.bits.addr = 8;
-  spi_packet.addr = &addr_cpy;
-  //spi_packet.bits.mosi = sizeof(data) * 8;
-  spi_packet.bits.mosi = 8;
+  // The addr reg likes to send the top byte first onto the bottom byte, meaning
+  // we'd have to shift 8 bit values 24 places left. That's annoying, so I'm
+  // using the cmd reg instead.
+  spi_packet.bits.cmd = sizeof(addr) * 8;
+  spi_packet.cmd = &addr_cpy;
+  spi_packet.bits.mosi = sizeof(data) * 8;
   spi_packet.mosi = &data_cpy;
 
-  spi_packet.bits.cmd = 0;
+  spi_packet.bits.addr = 0;
   spi_packet.bits.miso = 0;
 
-  xSemaphoreTake(sem_spi_transmit, 10 / portTICK_PERIOD_MS);
-  spi_trans(HSPI_HOST, &spi_packet);
-  */
-
-  // yay, I have a logic analyzer now! Lets see what this does!
-  uint16_t buf_cmd = 0x0000;
-  uint32_t buf_addr = 0x00000000;
-  uint32_t buf_mosi = 0x00000000;
-  spi_packet.cmd = &buf_cmd;
-  spi_packet.bits.miso = 0;
-  spi_packet.addr = &buf_addr;
-  spi_packet.mosi = &buf_mosi;
-
-  buf_cmd = 0x12;
-  spi_packet.bits.cmd = 8;
-  spi_packet.bits.addr = 0;
-  spi_packet.bits.mosi = 0;
-  //spi_packet.cmd = &buf_cmd;
-  spi_trans(HSPI_HOST, &spi_packet);
-
-  buf_addr = (0x34 << 24);
-  spi_packet.bits.cmd = 0;
-  spi_packet.bits.addr = 8;
-  spi_packet.bits.mosi = 0;
-  //spi_packet.addr = &buf_addr;
-  spi_trans(HSPI_HOST, &spi_packet);
-
-  buf_mosi = 0x56;
-  spi_packet.bits.cmd = 0;
-  spi_packet.bits.addr = 0;
-  spi_packet.bits.mosi = 8;
-  //spi_packet.mosi = &buf_mosi;
-  spi_trans(HSPI_HOST, &spi_packet);
-
-  buf_cmd = 0x78;
-  buf_addr = (0x9A << 24);
-  spi_packet.bits.cmd = 8;
-  spi_packet.bits.addr = 8;
-  spi_packet.bits.mosi = 0;
-  //spi_packet.cmd = &buf_cmd;
-  //spi_packet.addr = &buf_addr;
-  spi_trans(HSPI_HOST, &spi_packet);
-
-  buf_cmd = 0xBC;
-  buf_mosi = 0xDE;
-  spi_packet.bits.cmd = 8;
-  spi_packet.bits.addr = 0;
-  spi_packet.bits.mosi = 8;
-  //spi_packet.cmd = &buf_cmd;
-  //spi_packet.mosi = &buf_mosi;
-  spi_trans(HSPI_HOST, &spi_packet);
-
-  buf_addr= (0x13 << 24);
-  buf_mosi = 0x24;
-  spi_packet.bits.cmd = 0;
-  spi_packet.bits.addr = 8;
-  spi_packet.bits.mosi = 8;
-  //spi_packet.addr = &buf_addr;
-  //spi_packet.mosi = &buf_mosi;
-  spi_trans(HSPI_HOST, &spi_packet);
-
-  buf_cmd = 0x35;
-  buf_addr = (0x46 << 24);
-  buf_mosi = 0x57;
-  spi_packet.bits.cmd = 8;
-  spi_packet.bits.addr = 8;
-  spi_packet.bits.mosi = 8;
-  //spi_packet.cmd = &buf_cmd;
-  //spi_packet.addr = &buf_addr;
-  //spi_packet.mosi = &buf_mosi;
-  spi_trans(HSPI_HOST, &spi_packet);
-
-  // this should put the chip into test mode
-  buf_cmd = 0x0F;
-  buf_mosi = 0x01;
-  spi_packet.bits.cmd = 8;
-  spi_packet.bits.addr = 0;
-  spi_packet.bits.mosi = 8;
   spi_trans(HSPI_HOST, &spi_packet);
 }
 
@@ -289,17 +201,14 @@ void ICACHE_FLASH_ATTR display_init() {
   queue.length = 0;
   queue.current_index = 0;
 
-  // set up the SPI transmit semaphore
-  sem_spi_transmit = xSemaphoreCreateBinary();
-
   // configure SPI
   spi_config_t spi_config_data;
   spi_config_data.interface.cs_en = 1;
   spi_config_data.interface.mosi_en = 1;
   spi_config_data.interface.miso_en = 0;
-  // based on experimentation, byte order must be zero
-  // and bit order doesn't matter
+  // not clear what this does, even after exploring with a logic analyzer
   spi_config_data.interface.byte_tx_order = 0;
+  // endianness - 0 means bytes are written out MSB first, LSB last.
   spi_config_data.interface.bit_tx_order = 0;
   spi_config_data.interface.cpha = 0;
   spi_config_data.interface.cpol = 0;
@@ -313,12 +222,6 @@ void ICACHE_FLASH_ATTR display_init() {
   // use the external (not-flash) pins
   spi_init(HSPI_HOST, &spi_config_data);
 
-  // <TODO> DEBUG display test mode, single transmission
-  spi_transmit(0x0F, 0x00);
-  vTaskDelay(10 / portTICK_PERIOD_MS);
-  spi_transmit(0x0F, 0x00);
-
-  /*
   // setup for the MAX7221 chip (through a TXB0104 level shifter)
   // don't assume we're on a clean startup of the chip
   // put the chip into shutdown
@@ -335,12 +238,11 @@ void ICACHE_FLASH_ATTR display_init() {
   update_screen(character[BLANK]);
   // take the chip out of shutdown
   spi_transmit(0x0C, 0x01);
-  */
 }
 
 // change the software-defined display brightness
 void ICACHE_FLASH_ATTR display_brightness( uint8_t brightness ) {
-  //spi_transmit(0x0A, brightness);
+  spi_transmit(0x0A, brightness);
 }
 
 // update the whole screen in one shot
@@ -349,7 +251,7 @@ void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
     // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
     // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
-    //spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
+    spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
   }
   cur_screen = image;
 }
