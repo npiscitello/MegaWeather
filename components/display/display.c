@@ -8,38 +8,38 @@
 #define SCREEN_HEIGHT 8
 #define SCREEN_WIDTH 8
 
-// how many transitions can be queued at once
-#define MAX_QUEUE_LENGTH 5
-
-// global variables are gross, but this one is necessary - stores the current state of the screen
-// otherwise, the user would have to keep track of what's on the screen manually
-// uses a bit of memory, but I think we can spare it for convenience
-// this could be just a uint64_t, but using the icon struct allows us to easily change the way icon
-// storage is implemented in graphics.h if needed
+// global variables are gross, but this one is necessary - stores the current
+// state of the screen otherwise, the user would have to keep track of what's
+// on the screen manually uses a bit of memory, but I think we can spare it for
+// convenience this could be just a uint64_t, but using the icon struct allows
+// us to easily change the way icon storage is implemented in graphics.h if
+// needed
 icon_t cur_screen = {0, 8};
 
-// serves as janky mutexes
-// these are necessary - without checking if there's already a transition going, if a transition is
-// called for while there's already one going, it will freeze. I don't know why yet, that's worth
-// more investigation - it's quite possible it's avoidable without these.
-struct mutex {
-  volatile uint8_t screen        :1; // true when the screen is being actively written
-  volatile uint8_t transition    :1; // true when there's a transition in progress
-  volatile uint8_t queue         :1; // true when the queue is executing
-  volatile uint8_t mutex3        :1; 
-  volatile uint8_t mutex4        :1;
-  volatile uint8_t mutex5        :1;
-  volatile uint8_t mutex6        :1;
-  volatile uint8_t mutex7        :1;
-} mutex;
+// the storage for both queues - user-facing and currently executing
+struct queue{
+  transition_t* ptr;  // the malloc-ed storage for the queue
+  uint8_t length;     // number of items currently in the queue
+  uint8_t index;      // current location in the queue
+};
+struct queue user_queue;
+struct queue execution_queue;
 
-// Does this need to be in a struct? Probably not, but it feels cleaner - I hate standalone globals.
-// I mean, I hate globals in general, so...
-struct transition_queue {
-  transition_t transitions[MAX_QUEUE_LENGTH];  // the actual queue storage
-  uint8_t length;                                   // how many items are currently in the queue
-  uint8_t current_index;                            // which item we're executing
-} queue;
+// serves as janky mutexes
+// these are necessary - without checking if there's already a transition going,
+// if a transition is called for while there's already one going, it will
+// freeze. I don't know why yet, that's worth more investigation - it's quite
+// possible it's avoidable without these.
+struct mutex {
+  volatile uint8_t screen        :1; // true when the screen is being written
+  volatile uint8_t transition    :1; // true when there's a transition happening
+  volatile uint8_t queue         :1; // true when the queue is executing
+  volatile uint8_t mutex4        :1; 
+  volatile uint8_t mutex3        :1;
+  volatile uint8_t mutex2        :1;
+  volatile uint8_t mutex1        :1;
+  volatile uint8_t mutex0        :1;
+} mutex;
 
 /*
 // the timer to drive a transition
@@ -142,28 +142,49 @@ uint8_t ICACHE_FLASH_ATTR queue_executing() {
  */
 
 // transmit a register/data pair
-void spi_transmit(uint8_t addr, uint8_t data) {
+// <TODO> catch the spi_trans return code to feed into the custom retcode
+ret_code_t ICACHE_FLASH_ATTR spi_transmit(uint8_t addr, uint8_t data) {
   spi_trans_t spi_packet;
 
   uint16_t addr_cpy = addr;
   uint32_t data_cpy = data;
 
-  // The addr reg likes to send the top byte first onto the bottom byte, meaning
-  // we'd have to shift 8 bit values 24 places left. That's annoying, so I'm
-  // using the cmd reg instead.
+  // The addr reg likes to send the top byte first and the bottom byte last,
+  // meaning we'd have to shift 8 bit values 24 places left. That's annoying,
+  // so we're using the cmd reg instead.
   spi_packet.bits.cmd = sizeof(addr) * 8;
   spi_packet.cmd = &addr_cpy;
   spi_packet.bits.mosi = sizeof(data) * 8;
   spi_packet.mosi = &data_cpy;
-
   spi_packet.bits.addr = 0;
   spi_packet.bits.miso = 0;
 
   spi_trans(HSPI_HOST, &spi_packet);
+
+  return RET_NO_ERR;
+}
+
+// update the whole screen in one shot
+// I'm not worrying about mutex locking...yet. I'll figure something out if it becomes a problem.
+// <TODO> catch any errors from spi_transmit
+ret_code_t ICACHE_FLASH_ATTR display_update( const icon_t image ) {
+  for( uint8_t i = 0x01; i <= 0x08; i++ ) {
+    // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
+    // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
+    spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
+  }
+  cur_screen = image;
+  return RET_NO_ERR;
+}
+
+// change the software-defined display brightness
+ret_code_t ICACHE_FLASH_ATTR display_set_bright( uint8_t brightness ) {
+  return spi_transmit(0x0A, brightness);
 }
 
 // set up the screen and other variables for first use
-void ICACHE_FLASH_ATTR display_init() {
+// <TODO> grab any errors from the SPI writes or memory allocations
+ret_code_t ICACHE_FLASH_ATTR driver_init( const uint8_t queue_size ) {
   // init the queue
   queue.length = 0;
   queue.current_index = 0;
@@ -197,32 +218,16 @@ void ICACHE_FLASH_ATTR display_init() {
   // don't use the decode table
   spi_transmit(0x09, 0x00);
   // set intensity to middle ground
-  display_brightness(0x08);
+  display_set_bright(0x08);
   // scan across all digits
   spi_transmit(0x0b, 0x07);
   // turn off all pixels
-  update_screen(character[BLANK]);
+  display_update(character[BLANK]);
   // take the chip out of shutdown
   spi_transmit(0x0C, 0x01);
+
+  return RET_NO_ERR;
 }
-
-// change the software-defined display brightness
-void ICACHE_FLASH_ATTR display_brightness( uint8_t brightness ) {
-  spi_transmit(0x0A, brightness);
-}
-
-// update the whole screen in one shot
-// I'm not worrying about mutex locking...yet. I'll figure something out if it becomes a problem.
-void ICACHE_FLASH_ATTR update_screen( const icon_t image ) {
-  for( uint8_t i = 0x01; i <= 0x08; i++ ) {
-    // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
-    // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
-    spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
-  }
-  cur_screen = image;
-}
-
-
 
 /*
 // this is the actual transition "loop", which is really just a nonblocking timer function
