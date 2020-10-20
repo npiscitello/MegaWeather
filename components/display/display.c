@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include "esp_attr.h"
 #include "driver/spi.h"
 
@@ -186,8 +188,10 @@ ret_code_t ICACHE_FLASH_ATTR display_set_bright( uint8_t brightness ) {
 // <TODO> grab any errors from the SPI writes or memory allocations
 ret_code_t ICACHE_FLASH_ATTR driver_init( const uint8_t queue_size ) {
   // init the queue
-  queue.length = 0;
-  queue.current_index = 0;
+  user_queue.ptr = malloc(queue_size * sizeof(transition_t));
+  user_queue.length = 0; user_queue.index = 0;
+  execution_queue.ptr = malloc(queue_size * sizeof(transition_t));
+  execution_queue.length = 0; execution_queue.index = 0;
 
   // configure SPI
   spi_config_t spi_config_data;

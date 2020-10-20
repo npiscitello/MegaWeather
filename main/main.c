@@ -8,32 +8,32 @@
 
 void app_main() {
 
-  display_init();
+  driver_init(5);
 
   transition_t trans;
   trans.frame_delay = 75;
   trans.instant = false;
-  trans.space = 1;
+  trans.space = 2;
 
   trans.icon = digit[0];
-  add_to_queue( &trans );
+  queue_add( &trans );
 
   trans.icon = digit[1];
-  add_to_queue( &trans );
+  queue_add( &trans );
 
   trans.icon = digit[2];
-  add_to_queue( &trans );
+  queue_add( &trans );
 
   trans.icon = digit[3];
-  add_to_queue( &trans );
+  queue_add( &trans );
 
   trans.space = 3;
   trans.icon = icon[FOG];
-  add_to_queue( &trans );
+  queue_add( &trans );
 
   // this tests adding too many things to the queue
   trans.icon = digit[4];
-  add_to_queue( &trans );
+  queue_add( &trans );
 
-  execute_queue();
+  queue_execute();
 }
