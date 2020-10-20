@@ -11,18 +11,15 @@
 #define SCREEN_HEIGHT 8
 #define SCREEN_WIDTH 8
 
-// global variables are gross, but this one is necessary - stores the current
-// state of the screen otherwise, the user would have to keep track of what's
-// on the screen manually
-// uses a bit of memory, but I think we can spare it for convenience 
-// this could be just a uint64_t, but using the icon struct allows us to easily
-// change the way icon storage is implemented in graphics.h if needed
+// Stores the current state of the screen. This could be just a uint64_t, but
+// using the icon struct allows us to easily change the way icon storage is
+// implemented in graphics.h if needed.
 icon_t cur_screen = {0, 8};
 
-// the storage for both queues - user-facing and currently executing
-queue_t user_queue;       // user-facing; never gets executed directly. Always
+// storage for internal queues
+queue_t user_queue;       // User-facing; never gets executed directly. Always
                           // safe to be messed with.
-queue_t execution_queue;  // internal-only, so the user can mess with the user
+queue_t execution_queue;  // Internal-only, so the user can mess with the user
                           // queue without disturbing what's being written to
                           // the screen. DON'T TOUCH while executing!
 
@@ -43,34 +40,46 @@ struct mutex {
 /* HERE BE CUTE BABY DRAGONS
  * These are the user-facing wrapper functions. Contains pretty much all the
  * driver logic, which is mostly just invoking the low-level stuff in the right
- * order and at the right times. No memory or hardware mamangement goes on
+ * order and at the right times. No hardware or memory manangement goes on
  * here; that stuff is all below.
  */
 
 // baby dragons need the support of mama dragons
-ret_code_t copy_queue_data(queue_t* dst, queue_t* src);
-ret_code_t append_queue_data(queue_t* dst, queue_t* src);
-void erase_queue_mem(queue_t* queue);
+ret_code_t copy_queue_data(queue_t* dst, queue_t* src, uint8_t offset);
+void erase_queue_data(queue_t* queue);
 ret_code_t write_queue_to_display(queue_t* queue);
 
+ret_code_t queue_add(transition_t* item) {
+  if( user_queue.length < user_queue.max_length ) {
+    user_queue.ptr[user_queue.length] = *item;
+    user_queue.length++;
+    return RET_NO_ERR;
+  }
+  return RET_QUEUE_FULL;
+}
+
+ret_code_t queue_remove() {
+  user_queue.length--;
+  return RET_NO_ERR;
+}
+
 ret_code_t queue_fill(queue_t* ext_queue) {
-  return append_queue_data(&user_queue, ext_queue);
+  return copy_queue_data(&user_queue, ext_queue, user_queue.length);
 }
 
 ret_code_t queue_clear() {
   // screw you, user queue
-  erase_queue_mem(&user_queue);
+  erase_queue_data(&user_queue);
   return RET_NO_ERR;
 }
 
 // I was debating if this should be exposed or not, but having a single queue is
-// pretty limiting. If the user wants to manage their own queue, all power to
-// 'em!
+// limiting. If the user wants to manage their own queues, all power to 'em!
 ret_code_t queue_execute_external(queue_t* ext_queue) {
   // if the queue is executing, messing with the execution queue is a Bad Thing
   ret_code_t queue_state = queue_get_state();
   if( queue_state == RET_QUEUE_STOPPED ) {
-    ret_code_t ret_cpy = copy_queue_data(&execution_queue, ext_queue);
+    ret_code_t ret_cpy = copy_queue_data(&execution_queue, ext_queue, 0);
     ret_code_t ret_exec = write_queue_to_display(&execution_queue);
     // if the exec failed, we don't care if the queue was truncated
     return (ret_exec == RET_NO_ERR) ? ret_cpy : ret_exec;
@@ -133,7 +142,6 @@ ret_code_t queue_get_state() {
 // <TODO> catch the spi_trans return code to feed into the custom retcode
 ret_code_t ICACHE_FLASH_ATTR spi_transmit(uint8_t addr, uint8_t data) {
   spi_trans_t spi_packet;
-
   // The addr reg likes to send the top byte first and the bottom byte last,
   // meaning we'd have to shift 8 bit values 24 places left. That's annoying,
   // so we're using the cmd reg instead.
@@ -167,33 +175,20 @@ ret_code_t ICACHE_FLASH_ATTR display_set_bright( uint8_t brightness ) {
   return spi_transmit(0x0A, brightness);
 }
 
-// overwrite dst with src
-ret_code_t copy_queue_data(queue_t* dst, queue_t* src) {
+// overwrite dst (starting at index dst_offset) with src (starting at index 0)
+ret_code_t copy_queue_data(queue_t* dst, queue_t* src, uint8_t dst_offset) {
   ret_code_t retcode = RET_NO_ERR;
   uint8_t trans_count = src->length;
-  if( trans_count > dst->max_length ) {
-    trans_count = dst->max_length;
+  if( dst_offset + trans_count > dst->max_length) {
+    trans_count = dst->max_length - dst_offset;
     retcode = RET_QUEUE_TRUNC;
   }
-  memcpy(dst->ptr, src->ptr, trans_count * sizeof(transition_t));
-  return retcode;
-}
-
-// append as much of src as possible to dst
-ret_code_t append_queue_data(queue_t* dst, queue_t* src) {
-  ret_code_t retcode = RET_NO_ERR;
-  uint8_t trans_count = src->length;
-  if( dst->length + trans_count > dst->max_length) {
-    trans_count = dst->max_length - dst->length;
-    retcode = RET_QUEUE_TRUNC;
-  }
-  memcpy(&(dst->ptr[dst->length]), src->ptr, 
-      trans_count * sizeof(transition_t));
+  memcpy(&(dst->ptr[dst_offset]), src->ptr, trans_count * sizeof(transition_t));
   return retcode;
 }
 
 // immediately set all the memory in a queue to zero
-void erase_queue_mem(queue_t* queue) {
+void erase_queue_data(queue_t* queue) {
   memset(queue, 0x00, sizeof(queue_t));
 }
 
@@ -201,9 +196,9 @@ void erase_queue_mem(queue_t* queue) {
 // this function is, by design, NOT pure! If you mess with or depend on the
 // buffer that is passed to this, bad things will happen!
 ret_code_t write_queue_to_display(queue_t* queue) {
-  // make the LEDs light up with, uh, magic or something...
+  // <TODO> make the LEDs light up with, uh, magic or something...
   // we're done with the queue - burn it to the ground!
-  erase_queue_mem(queue);
+  erase_queue_data(queue);
   return RET_NO_ERR;
 }
 
