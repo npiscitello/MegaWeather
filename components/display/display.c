@@ -1,16 +1,5 @@
-//#include <stdio.h>
-#include "esp_log.h"
-
-#include <stdbool.h>
-
-#include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
-#include "freertos/task.h"
 #include "esp_attr.h"
-#include "driver/gpio.h"
 #include "driver/spi.h"
-#include "driver/hw_timer.h"
-
 
 #include "display.h"
 #include "graphics.h"
@@ -21,8 +10,6 @@
 
 // how many transitions can be queued at once
 #define MAX_QUEUE_LENGTH 5
-
-static const char *TAG = "disp";
 
 // global variables are gross, but this one is necessary - stores the current state of the screen
 // otherwise, the user would have to keep track of what's on the screen manually
@@ -154,26 +141,6 @@ uint8_t ICACHE_FLASH_ATTR queue_executing() {
  * finishes sending data (according to itr_enable). Maybe these are useful?
  */
 
-// catch SPI events
-void spi_event_callback(int event, void *arg) {
-  // do stuff? Event macros are SPI_X_EVENT, where X is:
-  // INIT, TRANS_START, TRANS_DONE, DEINIT
-  switch( event ) {
-    case SPI_INIT_EVENT:
-      ESP_LOGI(TAG, "SPI initialized");
-      break;
-    case SPI_TRANS_START_EVENT:
-      //ESP_LOGI(TAG, "[disp] SPI transmission started");
-      break;
-    case SPI_TRANS_DONE_EVENT:
-      //ESP_LOGI(TAG, "[disp] SPI transmission ended");
-      break;
-    case SPI_DEINIT_EVENT:
-      //ESP_LOGI(TAG, "[disp] SPI deinitialized");
-      break;
-  }
-}
-
 // transmit a register/data pair
 void spi_transmit(uint8_t addr, uint8_t data) {
   spi_trans_t spi_packet;
@@ -212,12 +179,11 @@ void ICACHE_FLASH_ATTR display_init() {
   spi_config_data.interface.bit_tx_order = 0;
   spi_config_data.interface.cpha = 0;
   spi_config_data.interface.cpol = 0;
-  // disable all interrupts except trans_done
+  // individual SPI events give us low level info we don't need
   spi_config_data.intr_enable.val = 0;
-  spi_config_data.intr_enable.trans_done = 1;
   spi_config_data.mode = SPI_MASTER_MODE;
-  spi_config_data.clk_div = SPI_2MHz_DIV;
-  spi_config_data.event_cb = spi_event_callback;
+  // gotta go... fAST
+  spi_config_data.clk_div = SPI_10MHz_DIV;
 
   // use the external (not-flash) pins
   spi_init(HSPI_HOST, &spi_config_data);
