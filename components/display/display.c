@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 
 #include "esp_attr.h"
 #include "driver/spi.h"
@@ -12,30 +13,24 @@
 
 // global variables are gross, but this one is necessary - stores the current
 // state of the screen otherwise, the user would have to keep track of what's
-// on the screen manually uses a bit of memory, but I think we can spare it for
-// convenience this could be just a uint64_t, but using the icon struct allows
-// us to easily change the way icon storage is implemented in graphics.h if
-// needed
+// on the screen manually
+// uses a bit of memory, but I think we can spare it for convenience 
+// this could be just a uint64_t, but using the icon struct allows us to easily
+// change the way icon storage is implemented in graphics.h if needed
 icon_t cur_screen = {0, 8};
 
 // the storage for both queues - user-facing and currently executing
-struct queue{
-  transition_t* ptr;  // the malloc-ed storage for the queue
-  uint8_t length;     // number of items currently in the queue
-  uint8_t index;      // current location in the queue
-};
-struct queue user_queue;
-struct queue execution_queue;
+queue_t user_queue;       // user-facing; never gets executed directly. Always
+                          // safe to be messed with.
+queue_t execution_queue;  // internal-only, so the user can mess with the user
+                          // queue without disturbing what's being written to
+                          // the screen. DON'T TOUCH while executing!
 
-// serves as janky mutexes
-// these are necessary - without checking if there's already a transition going,
-// if a transition is called for while there's already one going, it will
-// freeze. I don't know why yet, that's worth more investigation - it's quite
-// possible it's avoidable without these.
+// janky mutexes
 struct mutex {
-  volatile uint8_t screen        :1; // true when the screen is being written
-  volatile uint8_t transition    :1; // true when there's a transition happening
-  volatile uint8_t queue         :1; // true when the queue is executing
+  volatile uint8_t screen_write  :1; // true when the screen is being written
+  volatile uint8_t trans_exec    :1; // true when there's a transition happening
+  volatile uint8_t queue_exec    :1; // true when the queue is executing
   volatile uint8_t mutex4        :1; 
   volatile uint8_t mutex3        :1;
   volatile uint8_t mutex2        :1;
@@ -43,90 +38,72 @@ struct mutex {
   volatile uint8_t mutex0        :1;
 } mutex;
 
-/*
-// the timer to drive a transition
-static volatile os_timer_t trans_timer;
-
-// current frame - this doesn't really need to be in the transition_data struct
-uint8_t frame = 0;
 
 
+/* HERE BE CUTE BABY DRAGONS
+ * These are the user-facing wrapper functions. Contains pretty much all the
+ * driver logic, which is mostly just invoking the low-level stuff in the right
+ * order and at the right times. No memory or hardware mamangement goes on
+ * here; that stuff is all below.
+ */
 
-// add a transition to the queue if there's space
-uint8_t ICACHE_FLASH_ATTR add_to_queue( transition_t* item ) {
-  if( queue.length < MAX_QUEUE_LENGTH ) {
-    os_memcpy(&(queue.transitions[queue.length]), item, sizeof(transition_t));
-    queue.length++;
-    return true;
-  } else {
-    return false;
+// baby dragons need the support of mama dragons
+ret_code_t copy_queue_data(queue_t* dst, queue_t* src);
+ret_code_t append_queue_data(queue_t* dst, queue_t* src);
+void erase_queue_mem(queue_t* queue);
+ret_code_t write_queue_to_display(queue_t* queue);
+
+ret_code_t queue_fill(queue_t* ext_queue) {
+  return append_queue_data(&user_queue, ext_queue);
+}
+
+ret_code_t queue_clear() {
+  // screw you, user queue
+  erase_queue_mem(&user_queue);
+  return RET_NO_ERR;
+}
+
+// I was debating if this should be exposed or not, but having a single queue is
+// pretty limiting. If the user wants to manage their own queue, all power to
+// 'em!
+ret_code_t queue_execute_external(queue_t* ext_queue) {
+  // if the queue is executing, messing with the execution queue is a Bad Thing
+  ret_code_t queue_state = queue_get_state();
+  if( queue_state == RET_QUEUE_STOPPED ) {
+    ret_code_t ret_cpy = copy_queue_data(&execution_queue, ext_queue);
+    ret_code_t ret_exec = write_queue_to_display(&execution_queue);
+    // if the exec failed, we don't care if the queue was truncated
+    return (ret_exec == RET_NO_ERR) ? ret_cpy : ret_exec;
   }
+  return queue_state;
+}
+
+ret_code_t queue_execute() {
+  return queue_execute_external(&user_queue);
+}
+
+ret_code_t queue_stop() {
+  // we abuse the fact that the low-level queue write function isn't pure: by
+  // setting the execution queue's length to zero, when it's time to load the
+  // next transition, it'll look like we're done! As a bonus, the functions
+  // clean up after themselves like normal!
+
+  // if this doesn't work, you may need to make the length member volatile
+  execution_queue.length = 0;
+  return RET_NO_ERR;
+}
+
+ret_code_t queue_get_state() {
+  // I do love the smell of a simple wrapper in the morning
+  return mutex.queue_exec ? RET_QUEUE_EXECUTING : RET_QUEUE_STOPPED;
 }
 
 
 
-// reset the queue without executing any queued transitions
-void ICACHE_FLASH_ATTR clear_queue() {
-  // we don't really need to worry about actually clearing the memory - it will get overwritten if
-  // it needs to be
-  queue.current_index = 0;
-  queue.length = 0;
-  return;
-}
-
-
-
-// I need to declare these functions to be able to use it
-void transition_loop( void* tdata_raw );
-void update_screen( const icon_t image );
-// execute queued transitions and clear the queue
-void ICACHE_FLASH_ATTR queue_helper() {
-
-  // clean up after the previous run; having these here instead of in transition_loop allows us to
-  // interrupt queue executions with other queue executions
-  os_timer_disarm( &trans_timer );
-  frame = 0;
-
-  if( queue.current_index < queue.length ) {
-    os_timer_setfn(&trans_timer, (os_timer_func_t *)transition_loop, 
-        (void*)&(queue.transitions[queue.current_index]));
-    os_timer_arm(&trans_timer, queue.transitions[queue.current_index].frame_delay, 1);
-
-    // kick off the first frame manually, fixes the timing glitch
-    transition_loop( (void*)&(queue.transitions[queue.current_index]) );
-
-    queue.current_index++;
-
-  } else {
-    // we're done with the queue
-    clear_queue();
-    mutex.queue = false;
-  }
-
-  return;
-}
-
-
-
-void ICACHE_FLASH_ATTR execute_queue() {
-  queue.current_index = 0;
-  mutex.queue = true;
-  queue_helper();
-}
-
-
-
-uint8_t ICACHE_FLASH_ATTR queue_executing() {
-  return mutex.queue;
-}
-*/
-
-
-
-/* HERE BE DRAGONS
- * Functions below this line are low-level actual real-life (sorta) hardware functions - you
- * shouldn't need to touch them. These are the functions that actually shift the bits out to the
- * chip; there's nothing much going on down here logic-wise.
+/* HERE BE MOODY TEENAGE DRAGONS
+ * These functions are responsible for scheduling and leverage the ESP RTOS.
+ * You'll DEFINITELY need to mess with these if you're porting this to another
+ * platform.
  */
 
 /* SPI RTOS Scheduling Theory
@@ -143,21 +120,27 @@ uint8_t ICACHE_FLASH_ATTR queue_executing() {
  * finishes sending data (according to itr_enable). Maybe these are useful?
  */
 
+
+
+/* HERE BE SCARY ADULT DRAGONS
+ * Functions below this line are low-level actual real-life hardware and memory
+ * management functions. There's no logic down here, so you probably won't need
+ * to mess with these unless you're porting this to a new platform/display
+ * device.
+ */
+
 // transmit a register/data pair
 // <TODO> catch the spi_trans return code to feed into the custom retcode
 ret_code_t ICACHE_FLASH_ATTR spi_transmit(uint8_t addr, uint8_t data) {
   spi_trans_t spi_packet;
 
-  uint16_t addr_cpy = addr;
-  uint32_t data_cpy = data;
-
   // The addr reg likes to send the top byte first and the bottom byte last,
   // meaning we'd have to shift 8 bit values 24 places left. That's annoying,
   // so we're using the cmd reg instead.
   spi_packet.bits.cmd = sizeof(addr) * 8;
-  spi_packet.cmd = &addr_cpy;
+  spi_packet.cmd = (uint16_t*)&addr;
   spi_packet.bits.mosi = sizeof(data) * 8;
-  spi_packet.mosi = &data_cpy;
+  spi_packet.mosi = (uint32_t*)&data;
   spi_packet.bits.addr = 0;
   spi_packet.bits.miso = 0;
 
@@ -184,14 +167,58 @@ ret_code_t ICACHE_FLASH_ATTR display_set_bright( uint8_t brightness ) {
   return spi_transmit(0x0A, brightness);
 }
 
+// overwrite dst with src
+ret_code_t copy_queue_data(queue_t* dst, queue_t* src) {
+  ret_code_t retcode = RET_NO_ERR;
+  uint8_t trans_count = src->length;
+  if( trans_count > dst->max_length ) {
+    trans_count = dst->max_length;
+    retcode = RET_QUEUE_TRUNC;
+  }
+  memcpy(dst->ptr, src->ptr, trans_count * sizeof(transition_t));
+  return retcode;
+}
+
+// append as much of src as possible to dst
+ret_code_t append_queue_data(queue_t* dst, queue_t* src) {
+  ret_code_t retcode = RET_NO_ERR;
+  uint8_t trans_count = src->length;
+  if( dst->length + trans_count > dst->max_length) {
+    trans_count = dst->max_length - dst->length;
+    retcode = RET_QUEUE_TRUNC;
+  }
+  memcpy(&(dst->ptr[dst->length]), src->ptr, 
+      trans_count * sizeof(transition_t));
+  return retcode;
+}
+
+// immediately set all the memory in a queue to zero
+void erase_queue_mem(queue_t* queue) {
+  memset(queue, 0x00, sizeof(queue_t));
+}
+
+// run timers and stuff to shift the queue out to the display
+// this function is, by design, NOT pure! If you mess with or depend on the
+// buffer that is passed to this, bad things will happen!
+ret_code_t write_queue_to_display(queue_t* queue) {
+  // make the LEDs light up with, uh, magic or something...
+  // we're done with the queue - burn it to the ground!
+  erase_queue_mem(queue);
+  return RET_NO_ERR;
+}
+
 // set up the screen and other variables for first use
 // <TODO> grab any errors from the SPI writes or memory allocations
 ret_code_t ICACHE_FLASH_ATTR driver_init( const uint8_t queue_size ) {
-  // init the queue
   user_queue.ptr = malloc(queue_size * sizeof(transition_t));
-  user_queue.length = 0; user_queue.index = 0;
+  user_queue.length = 0;
+  user_queue.max_length = queue_size; 
+  user_queue.index = 0;
+
   execution_queue.ptr = malloc(queue_size * sizeof(transition_t));
-  execution_queue.length = 0; execution_queue.index = 0;
+  execution_queue.length = 0;
+  execution_queue.max_length = queue_size;
+  execution_queue.index = 0;
 
   // configure SPI
   spi_config_t spi_config_data;
@@ -233,7 +260,35 @@ ret_code_t ICACHE_FLASH_ATTR driver_init( const uint8_t queue_size ) {
   return RET_NO_ERR;
 }
 
+// <TODO> this is old stuff - delete when everything implemented
 /*
+// execute queued transitions and clear the queue
+void ICACHE_FLASH_ATTR queue_helper() {
+
+  // clean up after the previous run; having these here instead of in transition_loop allows us to
+  // interrupt queue executions with other queue executions
+  os_timer_disarm( &trans_timer );
+  frame = 0;
+
+  if( queue.current_index < queue.length ) {
+    os_timer_setfn(&trans_timer, (os_timer_func_t *)transition_loop, 
+        (void*)&(queue.transitions[queue.current_index]));
+    os_timer_arm(&trans_timer, queue.transitions[queue.current_index].frame_delay, 1);
+
+    // kick off the first frame manually, fixes the timing glitch
+    transition_loop( (void*)&(queue.transitions[queue.current_index]) );
+
+    queue.current_index++;
+
+  } else {
+    // we're done with the queue
+    clear_queue();
+    mutex.queue = false;
+  }
+
+  return;
+}
+
 // this is the actual transition "loop", which is really just a nonblocking timer function
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
   transition_t *data = (transition_t *)tdata_raw;
