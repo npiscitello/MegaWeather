@@ -58,18 +58,19 @@ ret_code_t display_set_bright(const uint8_t brightness);
 
 
 
-/* Adds an item to the end of the transition queue. Safe to call while a
+/* Adds a single transition to the end of the queue. Safe to call while a
  * previously defined queue is executing.
  * item: the transition to execute, placed at the end of the queue
  */
-ret_code_t queue_add(transition_t* item);
+ret_code_t queue_append_single(transition_t* item);
 
 
 
-/* Remove a transition from the end of the transition queue. Safe to call while
- * a previously defined queue is executing.
+/* Remove a single transition from the end of the  queue. Safe to call while
+ * a previously defined queue is executing. If called while the queue is empty,
+ * this function will have no effect.
  */
-ret_code_t queue_remove();
+ret_code_t queue_clear_single();
 
 
 
@@ -77,46 +78,30 @@ ret_code_t queue_remove();
  * are more transitions than the driver has been configured for, the queue will
  * be truncated. Safe to call while a previously defined queue is executing.
  * The provided queue is safe to be overwritten or freed after this function
- * is called.
+ * is called. If you want to fill the queue from scratch, call queue_clear()
+ * first.
  * queue: the user-constructed queue to be copied into the driver
  */
-ret_code_t queue_fill(queue_t* queue);
+ret_code_t queue_append(queue_t* queue);
 
 
 
-/* Clears the transition queue. Safe to call while a previously defined queue is
- * executing.
+/* Removes all transitions from the queue. Safe to call while a previously
+ * defined queue is executing.
  */
 ret_code_t queue_clear();
 
 
 
-/* Starts executing the queue according to its contents. It is safe to use the
- * queue modification functions after calling this function. This function will
- * return an error if a queue is already executing and the current queue will not
- * be modified or cleared.
+/* Starts the queue execution. If the queue is already started, this has no
+ * effect.
  */
-ret_code_t queue_execute();
+ret_code_t queue_start();
 
 
 
-/* A shortcut, useful if you're managing your queue(s) externally to the driver
- * or if you need to write something without disturbing the normal queue.
- * Copies the provided queue into driver memory and immediately executes it
- * (respecting the same constraints as queue_execute). The normal internal
- * queue is not modified or cleared. The parameters are handled as in
- * queue_fill. The provided queue is safe to be overwritten or freed after
- * this function is called.
- * buffer: a pointer to an array of transitions
- * count: how many transitions (NOT bytes) are to be executed
- */
-ret_code_t queue_execute_external(queue_t* queue);
-
-
-
-/* Stops the currently executing transition queue. The current transition will
- * be finished. The queue cannot be resumed; to start another queue, fill it
- * with queue_add or queue_fill and call queue_execute.
+/* Stops the queue execution. The queue may be started again from where it left
+ * off with queue_start. If the queue is already stopped, this has no effect.
  */
 ret_code_t queue_stop();
 

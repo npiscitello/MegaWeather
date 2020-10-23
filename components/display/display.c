@@ -4,6 +4,10 @@
 #include "esp_attr.h"
 #include "driver/spi.h"
 
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
+
 #include "display.h"
 #include "graphics.h"
 
@@ -16,118 +20,100 @@
 // implemented in graphics.h if needed.
 icon_t cur_screen = {0, 8};
 
-// storage for internal queues
-queue_t user_queue;       // User-facing; never gets executed directly. Always
-                          // safe to be messed with.
-queue_t execution_queue;  // Internal-only, so the user can mess with the user
-                          // queue without disturbing what's being written to
-                          // the screen. DON'T TOUCH while executing!
+// storage for the internal queue
+queue_t queue;
 
-// janky mutexes
-struct mutex {
-  volatile uint8_t screen_write  :1; // true when the screen is being written
-  volatile uint8_t trans_exec    :1; // true when there's a transition happening
-  volatile uint8_t queue_exec    :1; // true when the queue is executing
-  volatile uint8_t mutex4        :1; 
-  volatile uint8_t mutex3        :1;
-  volatile uint8_t mutex2        :1;
-  volatile uint8_t mutex1        :1;
-  volatile uint8_t mutex0        :1;
-} mutex;
+// Mutex to manage queue execution. Basically, if the queue is sitting idle,
+// it's fair game, but if it's being dumped to the screen, nothing is allowed to
+// mess with it.
+SemaphoreHandle_t queue_mutex = NULL;
 
 
 
 /* HERE BE CUTE BABY DRAGONS
  * These are the user-facing wrapper functions. Contains pretty much all the
  * driver logic, which is mostly just invoking the low-level stuff in the right
- * order and at the right times. No hardware or memory manangement goes on
- * here; that stuff is all below.
+ * order and at the right times. No hardware manangement goes on here; that
+ * stuff is all below.
  */
 
-// baby dragons need the support of mama dragons
-ret_code_t copy_queue_data(queue_t* dst, queue_t* src, uint8_t offset);
-void erase_queue_data(queue_t* queue);
-ret_code_t write_queue_to_display(queue_t* queue);
-
-ret_code_t queue_add(transition_t* item) {
-  if( user_queue.length < user_queue.max_length ) {
-    user_queue.ptr[user_queue.length] = *item;
-    user_queue.length++;
-    return RET_NO_ERR;
-  }
-  return RET_QUEUE_FULL;
+ret_code_t queue_append_single(transition_t* item) {
+  ret_code_t retcode = RET_NO_ERR;
+  // try to get queue_mutex (DON'T BLOCK)
+  // if( queue_mutex was available) {
+    if( queue.length < queue.max_length ) {
+      queue.ptr[queue.length] = *item;
+      queue.length++;
+    } else {
+      retcode = RET_QUEUE_FULL;
+    }
+  // } else {
+    // retcode = RET_QUEUE_EXECUTING
+  // }
+  // release queue mutex
+  return retcode;
 }
 
-ret_code_t queue_remove() {
-  user_queue.length--;
-  return RET_NO_ERR;
+ret_code_t queue_clear_single() {
+  ret_code_t retcode = RET_NO_ERR;
+  // try to get queue_mutex (DON'T BLOCK)
+  // if( queue_mutex was available) {
+    if( queue.length > 0 ) {
+      queue.length--;
+    }
+    // release queue mutex
+  // } else {
+    // return RET_QUEUE_EXECUTING;
+  // }
+  return retcode;
 }
 
-ret_code_t queue_fill(queue_t* ext_queue) {
-  return copy_queue_data(&user_queue, ext_queue, user_queue.length);
+ret_code_t queue_append(queue_t* ext_queue) {
+  ret_code_t retcode = RET_NO_ERR;
+  // try to get queue_mutex (DON'T BLOCK)
+  // if( queue_mutex was available) {
+    uint8_t trans_count = ext_queue->length;
+    if( queue.length + trans_count > queue.max_length) {
+      trans_count = queue.max_length - queue.length;
+      retcode = RET_QUEUE_TRUNC;
+    }
+    memcpy(&(queue.ptr[queue.length]), ext_queue->ptr, 
+        trans_count * sizeof(transition_t));
+    // release queue mutex
+  // } else {
+    // retcode = RET_QUEUE_EXECUTING;
+  // }
+  return retcode;
 }
 
 ret_code_t queue_clear() {
-  // screw you, user queue
-  erase_queue_data(&user_queue);
+  ret_code_t retcode = RET_NO_ERR;
+  // try to get queue_mutex (DON'T BLOCK)
+  // if( queue_mutex was available) {
+    // we don't need to actually erase bytes, just make the queue think there's
+    // nothing in it!
+    queue.length = 0;
+    // release queue mutex
+  // } else {
+    // retcode = RET_QUEUE_EXECUTING;
+  // }
+  return retcode;
+}
+
+ret_code_t queue_start() {
+  // set the write_to_display task notification 0 value to 1
   return RET_NO_ERR;
 }
 
-// I was debating if this should be exposed or not, but having a single queue is
-// limiting. If the user wants to manage their own queues, all power to 'em!
-ret_code_t queue_execute_external(queue_t* ext_queue) {
-  // if the queue is executing, messing with the execution queue is a Bad Thing
-  ret_code_t queue_state = queue_get_state();
-  if( queue_state == RET_QUEUE_STOPPED ) {
-    ret_code_t ret_cpy = copy_queue_data(&execution_queue, ext_queue, 0);
-    ret_code_t ret_exec = write_queue_to_display(&execution_queue);
-    // if the exec failed, we don't care if the queue was truncated
-    return (ret_exec == RET_NO_ERR) ? ret_cpy : ret_exec;
-  }
-  return queue_state;
-}
-
-ret_code_t queue_execute() {
-  return queue_execute_external(&user_queue);
-}
-
 ret_code_t queue_stop() {
-  // we abuse the fact that the low-level queue write function isn't pure: by
-  // setting the execution queue's length to zero, when it's time to load the
-  // next transition, it'll look like we're done! As a bonus, the functions
-  // clean up after themselves like normal!
-
-  // if this doesn't work, you may need to make the length member volatile
-  execution_queue.length = 0;
+  // set the write_to_display task notification 0 value to 0
   return RET_NO_ERR;
 }
 
 ret_code_t queue_get_state() {
-  // I do love the smell of a simple wrapper in the morning
-  return mutex.queue_exec ? RET_QUEUE_EXECUTING : RET_QUEUE_STOPPED;
+  return xSemaphoreGetMutexHolder(queue_mutex) == NULL ?
+    RET_QUEUE_STOPPED : RET_QUEUE_EXECUTING;
 }
-
-
-
-/* HERE BE MOODY TEENAGE DRAGONS
- * These functions are responsible for scheduling and leverage the ESP RTOS.
- * You'll DEFINITELY need to mess with these if you're porting this to another
- * platform.
- */
-
-/* SPI RTOS Scheduling Theory
- * <TODO> right now, SPI is blocking. Use the below scheduling details to
- * implement non-blocking SPI!
- *
- * schedule SPI task as a fairly high priority (priorities are 1-11, lower
- * numbers being less important) - shifting to the display is the most important
- * thing we do, this being a smart display and all. We use the semaphore to tell
- * the OS that there's SPI data ready to write out and it should give SPI some
- * processor time.
- *
- * SPI will also supposedly spit out "events" (ISRs) when it starts sending and
- * finishes sending data (according to itr_enable). Maybe these are useful?
- */
 
 
 
@@ -158,7 +144,6 @@ ret_code_t ICACHE_FLASH_ATTR spi_transmit(uint8_t addr, uint8_t data) {
 }
 
 // update the whole screen in one shot
-// I'm not worrying about mutex locking...yet. I'll figure something out if it becomes a problem.
 // <TODO> catch any errors from spi_transmit
 ret_code_t ICACHE_FLASH_ATTR display_update( const icon_t image ) {
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
@@ -175,45 +160,39 @@ ret_code_t ICACHE_FLASH_ATTR display_set_bright( uint8_t brightness ) {
   return spi_transmit(0x0A, brightness);
 }
 
-// overwrite dst (starting at index dst_offset) with src (starting at index 0)
-ret_code_t copy_queue_data(queue_t* dst, queue_t* src, uint8_t dst_offset) {
-  ret_code_t retcode = RET_NO_ERR;
-  uint8_t trans_count = src->length;
-  if( dst_offset + trans_count > dst->max_length) {
-    trans_count = dst->max_length - dst_offset;
-    retcode = RET_QUEUE_TRUNC;
+/* SPI RTOS Scheduling Theory
+ * <TODO> right now, SPI is blocking. Use the below scheduling details to
+ * implement non-blocking SPI!
+ *
+ * schedule SPI task as a fairly high priority (priorities are 1-11, lower
+ * numbers being less important) - shifting to the display is the most important
+ * thing we do, this being a smart display and all. We use the semaphore to tell
+ * the OS that there's SPI data ready to write out and it should give SPI some
+ * processor time.
+ *
+ * SPI will also supposedly spit out "events" (ISRs) when it starts sending and
+ * finishes sending data (according to itr_enable). Maybe these are useful?
+ */
+
+// the task function that actually writes to the display
+void task_write_to_display(void* arg) {
+  while(1) {
+    // block waiting on task notification 0 to become pending
+    // lock execution queue
+    // while( value of notification 0 is 1 )
+      // perform one transition (and decrement queue index)
+    // unlock the execution queue
   }
-  memcpy(&(dst->ptr[dst_offset]), src->ptr, trans_count * sizeof(transition_t));
-  return retcode;
-}
-
-// immediately set all the memory in a queue to zero
-void erase_queue_data(queue_t* queue) {
-  memset(queue, 0x00, sizeof(queue_t));
-}
-
-// run timers and stuff to shift the queue out to the display
-// this function is, by design, NOT pure! If you mess with or depend on the
-// buffer that is passed to this, bad things will happen!
-ret_code_t write_queue_to_display(queue_t* queue) {
-  // <TODO> make the LEDs light up with, uh, magic or something...
-  // we're done with the queue - burn it to the ground!
-  erase_queue_data(queue);
-  return RET_NO_ERR;
 }
 
 // set up the screen and other variables for first use
 // <TODO> grab any errors from the SPI writes or memory allocations
 ret_code_t ICACHE_FLASH_ATTR driver_init( const uint8_t queue_size ) {
-  user_queue.ptr = malloc(queue_size * sizeof(transition_t));
-  user_queue.length = 0;
-  user_queue.max_length = queue_size; 
-  user_queue.index = 0;
-
-  execution_queue.ptr = malloc(queue_size * sizeof(transition_t));
-  execution_queue.length = 0;
-  execution_queue.max_length = queue_size;
-  execution_queue.index = 0;
+  // give the queue some space to breathe
+  queue.ptr = malloc(queue_size * sizeof(transition_t));
+  queue.length = 0;
+  queue.max_length = queue_size;
+  queue.index = 0;
 
   // configure SPI
   spi_config_t spi_config_data;
@@ -251,6 +230,11 @@ ret_code_t ICACHE_FLASH_ATTR driver_init( const uint8_t queue_size ) {
   display_update(character[BLANK]);
   // take the chip out of shutdown
   spi_transmit(0x0C, 0x01);
+
+  // set up the write to display task and the execution queue mutex
+  // <TODO> Should the stack be smaller? bigger?
+  xTaskCreate(task_write_to_display, "write_to_display", 1024, NULL, 10, NULL);
+  queue_mutex = xSemaphoreCreateMutex();
 
   return RET_NO_ERR;
 }
