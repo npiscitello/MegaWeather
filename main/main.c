@@ -8,7 +8,7 @@
 
 void app_main() {
 
-  driver_init(5);
+  disp_driver_init(5);
 
   transition_t trans;
   trans.frame_delay = 75;
@@ -16,24 +16,24 @@ void app_main() {
   trans.space = 2;
 
   trans.icon = digit[0];
-  queue_add( &trans );
+  disp_queue_append_single( &trans );
 
   trans.icon = digit[1];
-  queue_add( &trans );
+  disp_queue_append_single( &trans );
 
   trans.icon = digit[2];
-  queue_add( &trans );
+  disp_queue_append_single( &trans );
 
   trans.icon = digit[3];
-  queue_add( &trans );
+  disp_queue_append_single( &trans );
 
   trans.space = 3;
   trans.icon = icon[FOG];
-  queue_add( &trans );
+  disp_queue_append_single( &trans );
 
   // this tests adding too many things to the queue
-  trans.icon = digit[4];
-  queue_add( &trans );
+  trans.icon = digit[5];
+  disp_queue_append_single( &trans );
 
-  queue_execute();
+  disp_queue_start();
 }

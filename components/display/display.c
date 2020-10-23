@@ -1,15 +1,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "esp_attr.h"
-#include "driver/spi.h"
-
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
 
+#include "esp_attr.h"
+#include "driver/spi.h"
+
 #include "display.h"
 #include "graphics.h"
+
+// platform-specific
+#define ULONG_MAX 0xFFFFFFFF
 
 // actual pixel dimensions of the LED array
 #define SCREEN_HEIGHT 8
@@ -18,60 +21,68 @@
 // Stores the current state of the screen. This could be just a uint64_t, but
 // using the icon struct allows us to easily change the way icon storage is
 // implemented in graphics.h if needed.
-icon_t cur_screen = {0, 8};
+icon_t cur_screen = {0, SCREEN_WIDTH};
 
 // storage for the internal queue
 queue_t queue;
 
-// Mutex to manage queue execution. Basically, if the queue is sitting idle,
-// it's fair game, but if it's being dumped to the screen, nothing is allowed to
-// mess with it.
+// We only want one thing to be able to mess with the queue at a time, otherwise
+// it may get corrupted.
 SemaphoreHandle_t queue_mutex = NULL;
+
+// handle for the write_to_display task
+TaskHandle_t queue_execute_task = NULL;
+
+// things we can tell the queue execution task to do
+enum queue_execute_cmds {
+  QUEUE_CMD_START = 1,
+  QUEUE_CMD_STOP  = 2
+};
 
 
 
 /* HERE BE CUTE BABY DRAGONS
- * These are the user-facing wrapper functions. Contains pretty much all the
- * driver logic, which is mostly just invoking the low-level stuff in the right
- * order and at the right times. No hardware manangement goes on here; that
- * stuff is all below.
+ * These are the user-facing wrapper functions. Contains all the driver logic,
+ * which is pretty much just queue management. No hardware manangement goes on
+ * here; that stuff is all below.
  */
 
-ret_code_t queue_append_single(transition_t* item) {
+ret_code_t disp_queue_append_single(transition_t* item) {
   ret_code_t retcode = RET_NO_ERR;
-  // try to get queue_mutex (DON'T BLOCK)
-  // if( queue_mutex was available) {
+  if( xSemaphoreTake(queue_mutex, 0) == pdTRUE ) {
     if( queue.length < queue.max_length ) {
       queue.ptr[queue.length] = *item;
       queue.length++;
     } else {
       retcode = RET_QUEUE_FULL;
     }
-  // } else {
-    // retcode = RET_QUEUE_EXECUTING
-  // }
-  // release queue mutex
+    xSemaphoreGive(queue_mutex);
+  } else {
+    retcode = RET_QUEUE_LOCKED;
+  }
   return retcode;
 }
 
-ret_code_t queue_clear_single() {
+
+
+ret_code_t disp_queue_clear_single() {
   ret_code_t retcode = RET_NO_ERR;
-  // try to get queue_mutex (DON'T BLOCK)
-  // if( queue_mutex was available) {
+  if( xSemaphoreTake(queue_mutex, 0) == pdTRUE ) {
     if( queue.length > 0 ) {
       queue.length--;
     }
-    // release queue mutex
-  // } else {
-    // return RET_QUEUE_EXECUTING;
-  // }
+    xSemaphoreGive(queue_mutex);
+  } else {
+    return RET_QUEUE_LOCKED;
+  }
   return retcode;
 }
 
-ret_code_t queue_append(queue_t* ext_queue) {
+
+
+ret_code_t disp_queue_append(queue_t* ext_queue) {
   ret_code_t retcode = RET_NO_ERR;
-  // try to get queue_mutex (DON'T BLOCK)
-  // if( queue_mutex was available) {
+  if( xSemaphoreTake(queue_mutex, 0) == pdTRUE ) {
     uint8_t trans_count = ext_queue->length;
     if( queue.length + trans_count > queue.max_length) {
       trans_count = queue.max_length - queue.length;
@@ -79,46 +90,49 @@ ret_code_t queue_append(queue_t* ext_queue) {
     }
     memcpy(&(queue.ptr[queue.length]), ext_queue->ptr, 
         trans_count * sizeof(transition_t));
-    // release queue mutex
-  // } else {
-    // retcode = RET_QUEUE_EXECUTING;
-  // }
+    xSemaphoreGive(queue_mutex);
+  } else {
+    retcode = RET_QUEUE_LOCKED;
+  }
   return retcode;
 }
 
-ret_code_t queue_clear() {
+
+
+ret_code_t disp_queue_clear() {
   ret_code_t retcode = RET_NO_ERR;
-  // try to get queue_mutex (DON'T BLOCK)
-  // if( queue_mutex was available) {
+  if( xSemaphoreTake(queue_mutex, 0) == pdTRUE ) {
     // we don't need to actually erase bytes, just make the queue think there's
     // nothing in it!
     queue.length = 0;
-    // release queue mutex
-  // } else {
-    // retcode = RET_QUEUE_EXECUTING;
-  // }
+    xSemaphoreGive(queue_mutex);
+  } else {
+    retcode = RET_QUEUE_LOCKED;
+  }
   return retcode;
 }
 
-ret_code_t queue_start() {
-  // set the write_to_display task notification 0 value to 1
+
+
+ret_code_t disp_queue_start() {
+  xTaskNotify(queue_execute_task, QUEUE_CMD_START, eSetValueWithOverwrite);
   return RET_NO_ERR;
 }
 
-ret_code_t queue_stop() {
-  // set the write_to_display task notification 0 value to 0
+
+
+ret_code_t disp_queue_stop() {
+  xTaskNotify(queue_execute_task, QUEUE_CMD_STOP, eSetValueWithOverwrite);
   return RET_NO_ERR;
 }
 
-ret_code_t queue_get_state() {
-  return xSemaphoreGetMutexHolder(queue_mutex) == NULL ?
-    RET_QUEUE_STOPPED : RET_QUEUE_EXECUTING;
-}
+
+
 
 
 
 /* HERE BE SCARY ADULT DRAGONS
- * Functions below this line are low-level actual real-life hardware and memory
+ * Functions below this line are low-level actual real-life hardware and OS
  * management functions. There's no logic down here, so you probably won't need
  * to mess with these unless you're porting this to a new platform/display
  * device.
@@ -143,9 +157,11 @@ ret_code_t ICACHE_FLASH_ATTR spi_transmit(uint8_t addr, uint8_t data) {
   return RET_NO_ERR;
 }
 
+
+
 // update the whole screen in one shot
 // <TODO> catch any errors from spi_transmit
-ret_code_t ICACHE_FLASH_ATTR display_update( const icon_t image ) {
+ret_code_t ICACHE_FLASH_ATTR disp_set_icon( const icon_t image ) {
   for( uint8_t i = 0x01; i <= 0x08; i++ ) {
     // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
     // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
@@ -155,39 +171,39 @@ ret_code_t ICACHE_FLASH_ATTR display_update( const icon_t image ) {
   return RET_NO_ERR;
 }
 
+
+
 // change the software-defined display brightness
-ret_code_t ICACHE_FLASH_ATTR display_set_bright( uint8_t brightness ) {
+ret_code_t ICACHE_FLASH_ATTR disp_set_brightness( uint8_t brightness ) {
   return spi_transmit(0x0A, brightness);
 }
 
-/* SPI RTOS Scheduling Theory
- * <TODO> right now, SPI is blocking. Use the below scheduling details to
- * implement non-blocking SPI!
- *
- * schedule SPI task as a fairly high priority (priorities are 1-11, lower
- * numbers being less important) - shifting to the display is the most important
- * thing we do, this being a smart display and all. We use the semaphore to tell
- * the OS that there's SPI data ready to write out and it should give SPI some
- * processor time.
- *
- * SPI will also supposedly spit out "events" (ISRs) when it starts sending and
- * finishes sending data (according to itr_enable). Maybe these are useful?
- */
+
 
 // the task function that actually writes to the display
-void task_write_to_display(void* arg) {
+void disp_queue_execute(void* arg) {
   while(1) {
-    // block waiting on task notification 0 to become pending
-    // lock execution queue
-    // while( value of notification 0 is 1 )
-      // perform one transition (and decrement queue index)
-    // unlock the execution queue
+    uint32_t cmd;
+    // YCM doesn't like this - local long is bigger than SDK long
+    xTaskNotifyWait(0, ULONG_MAX, &cmd, portMAX_DELAY);
+    if( cmd == QUEUE_CMD_START ) {
+      // doesn't matter if this blocks (separate task from user code)
+      xSemaphoreTake(queue_mutex, portMAX_DELAY);
+      do {
+        // perform one transition (and decrement queue index)
+        // we just want to check if there's any new messages
+        xTaskNotifyWait(0, ULONG_MAX, &cmd, 0);
+      } while( cmd != QUEUE_CMD_STOP );
+      xSemaphoreGive(queue_mutex);
+    }
   }
 }
 
+
+
 // set up the screen and other variables for first use
 // <TODO> grab any errors from the SPI writes or memory allocations
-ret_code_t ICACHE_FLASH_ATTR driver_init( const uint8_t queue_size ) {
+ret_code_t ICACHE_FLASH_ATTR disp_driver_init( const uint8_t queue_size ) {
   // give the queue some space to breathe
   queue.ptr = malloc(queue_size * sizeof(transition_t));
   queue.length = 0;
@@ -223,17 +239,20 @@ ret_code_t ICACHE_FLASH_ATTR driver_init( const uint8_t queue_size ) {
   // don't use the decode table
   spi_transmit(0x09, 0x00);
   // set intensity to middle ground
-  display_set_bright(0x08);
+  disp_set_brightness(0x08);
   // scan across all digits
   spi_transmit(0x0b, 0x07);
   // turn off all pixels
-  display_update(character[BLANK]);
+  disp_set_icon(character[BLANK]);
   // take the chip out of shutdown
   spi_transmit(0x0C, 0x01);
 
   // set up the write to display task and the execution queue mutex
+  // writing to the display is just about the most important thing we do, so it
+  // should have a pretty high priority
   // <TODO> Should the stack be smaller? bigger?
-  xTaskCreate(task_write_to_display, "write_to_display", 1024, NULL, 10, NULL);
+  xTaskCreate(disp_queue_execute, "queue_execute", 1024, NULL,
+      DISPLAY_PRIORITY, queue_execute_task);
   queue_mutex = xSemaphoreCreateMutex();
 
   return RET_NO_ERR;
@@ -241,33 +260,6 @@ ret_code_t ICACHE_FLASH_ATTR driver_init( const uint8_t queue_size ) {
 
 // <TODO> this is old stuff - delete when everything implemented
 /*
-// execute queued transitions and clear the queue
-void ICACHE_FLASH_ATTR queue_helper() {
-
-  // clean up after the previous run; having these here instead of in transition_loop allows us to
-  // interrupt queue executions with other queue executions
-  os_timer_disarm( &trans_timer );
-  frame = 0;
-
-  if( queue.current_index < queue.length ) {
-    os_timer_setfn(&trans_timer, (os_timer_func_t *)transition_loop, 
-        (void*)&(queue.transitions[queue.current_index]));
-    os_timer_arm(&trans_timer, queue.transitions[queue.current_index].frame_delay, 1);
-
-    // kick off the first frame manually, fixes the timing glitch
-    transition_loop( (void*)&(queue.transitions[queue.current_index]) );
-
-    queue.current_index++;
-
-  } else {
-    // we're done with the queue
-    clear_queue();
-    mutex.queue = false;
-  }
-
-  return;
-}
-
 // this is the actual transition "loop", which is really just a nonblocking timer function
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
   transition_t *data = (transition_t *)tdata_raw;
