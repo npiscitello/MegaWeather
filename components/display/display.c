@@ -35,6 +35,7 @@ TaskHandle_t queue_execute_task = NULL;
 
 // things we can tell the queue execution task to do
 enum queue_execute_cmds {
+  QUEUE_CMD_NOP   = 0,
   QUEUE_CMD_START = 1,
   QUEUE_CMD_STOP  = 2
 };
@@ -114,6 +115,18 @@ ret_code_t disp_queue_clear() {
 
 
 
+ret_code_t disp_queue_reset() {
+  ret_code_t retcode = RET_NO_ERR;
+  if( xSemaphoreTake(queue_mutex, 0) == pdTRUE ) {
+    queue.index = 0;
+    xSemaphoreGive(queue_mutex);
+  } else {
+    retcode = RET_QUEUE_LOCKED;
+  }
+  return retcode;
+}
+
+
 ret_code_t disp_queue_start() {
   xTaskNotify(queue_execute_task, QUEUE_CMD_START, eSetValueWithOverwrite);
   return RET_NO_ERR;
@@ -162,7 +175,7 @@ ret_code_t ICACHE_FLASH_ATTR spi_transmit(uint8_t addr, uint8_t data) {
 // update the whole screen in one shot
 // <TODO> catch any errors from spi_transmit
 ret_code_t ICACHE_FLASH_ATTR disp_set_icon( const icon_t image ) {
-  for( uint8_t i = 0x01; i <= 0x08; i++ ) {
+  for( uint8_t i = 1; i <= image.width; i++ ) {
     // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
     // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
     spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
@@ -184,20 +197,78 @@ ret_code_t ICACHE_FLASH_ATTR disp_set_brightness( uint8_t brightness ) {
 void disp_queue_execute(void* arg) {
   while(1) {
     uint32_t cmd;
-    // YCM doesn't like this - local long is bigger than SDK long
     xTaskNotifyWait(0, ULONG_MAX, &cmd, portMAX_DELAY);
     if( cmd == QUEUE_CMD_START ) {
+      cmd = QUEUE_CMD_NOP;
       // doesn't matter if this blocks (separate task from user code)
       xSemaphoreTake(queue_mutex, portMAX_DELAY);
-      do {
-        // perform one transition (and decrement queue index)
-        // we just want to check if there's any new messages
+      // if the index is out of bounds, start from the beginning
+      queue.index = (queue.index >= queue.length) ? 0 : queue.index;
+      while(true) {
+        // this loop cycles once per transition in queue.ptr - we don't want
+        // the user to be able to interrupt a write mid-transition
+        if( queue.ptr[queue.index].instant == true ) {
+          // instant update, if requested...
+          disp_set_icon(queue.ptr[queue.index].icon);
+
+        } else {
+          // ...otherwise, do an animated update
+          disp_set_icon(queue.ptr[queue.index].icon);
+        }
+
+        cur_screen = queue.ptr[queue.index].icon;
+        queue.index++;
+
+        // should we stop?
         xTaskNotifyWait(0, ULONG_MAX, &cmd, 0);
-      } while( cmd != QUEUE_CMD_STOP );
+        if( cmd == QUEUE_CMD_STOP || queue.index >= queue.length ) { 
+          cmd = QUEUE_CMD_NOP;
+          break; 
+        }
+      }
       xSemaphoreGive(queue_mutex);
     }
   }
 }
+
+/*
+// this is the actual transition "loop", which is really just a nonblocking timer function
+void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
+  transition_t *data = (transition_t *)tdata_raw;
+  frame++;
+
+  // skip to the last frame if requested, artifically shifting cur_screen appropriately
+  if( data->instant == true && frame <= data->space + data->icon.width ) {
+    frame = data->space + data->icon.width;
+    for( uint8_t i = 0; i < SCREEN_HEIGHT; i++ ) {
+      ((uint8_t*)&cur_screen)[i] = ((uint8_t*)&cur_screen)[i] >> (data->space + data->icon.width - 1);
+    }
+  }
+
+  // Generate the next frame then push it to the display in one shot.
+  // This takes more time and memory, but it allows us to keep the cur_screen var updated.
+  // Basically, I'm striving for screen state changes to be as atomic as possible, in that the state
+  // is always known internally so the user doesn't have to worry about interrupting operations.
+  if( frame <= data->space + data->icon.width ) {
+
+    icon_t next_frame;
+    next_frame.width = 8;
+    for( uint8_t i = 0; i < SCREEN_HEIGHT; i++ ) {
+      // treat the 64 bit numbers like an 8 member uint8_t array
+      // shifts are 'backwards' because the MSB corresponds to the leftmost column and the LSB
+      // corresponds to the rightmost column
+      ((uint8_t*)&next_frame)[i] = 
+        ((uint8_t*)&cur_screen)[i] >> 1 |
+        ((uint8_t*)&data->icon)[i] << (SCREEN_WIDTH + data->space - frame);
+    }
+    update_screen(next_frame);
+
+  } else {
+    // we've finished the transition! Let the queue know we're done
+    queue_helper();
+  }
+}
+*/
 
 
 
@@ -243,57 +314,18 @@ ret_code_t ICACHE_FLASH_ATTR disp_driver_init( const uint8_t queue_size ) {
   // scan across all digits
   spi_transmit(0x0b, 0x07);
   // turn off all pixels
-  disp_set_icon(character[BLANK]);
+  //disp_set_icon(character[BLANK]);
+  disp_set_icon(character[EXCLAIM]);
   // take the chip out of shutdown
   spi_transmit(0x0C, 0x01);
 
+  /*
   // set up the write to display task and the execution queue mutex
-  // writing to the display is just about the most important thing we do, so it
-  // should have a pretty high priority
   // <TODO> Should the stack be smaller? bigger?
   xTaskCreate(disp_queue_execute, "queue_execute", 1024, NULL,
       DISPLAY_PRIORITY, queue_execute_task);
   queue_mutex = xSemaphoreCreateMutex();
+  */
 
   return RET_NO_ERR;
 }
-
-// <TODO> this is old stuff - delete when everything implemented
-/*
-// this is the actual transition "loop", which is really just a nonblocking timer function
-void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
-  transition_t *data = (transition_t *)tdata_raw;
-  frame++;
-
-  // skip to the last frame if requested, artifically shifting cur_screen appropriately
-  if( data->instant == true && frame <= data->space + data->icon.width ) {
-    frame = data->space + data->icon.width;
-    for( uint8_t i = 0; i < SCREEN_HEIGHT; i++ ) {
-      ((uint8_t*)&cur_screen)[i] = ((uint8_t*)&cur_screen)[i] >> (data->space + data->icon.width - 1);
-    }
-  }
-
-  // Generate the next frame then push it to the display in one shot.
-  // This takes more time and memory, but it allows us to keep the cur_screen var updated.
-  // Basically, I'm striving for screen state changes to be as atomic as possible, in that the state
-  // is always known internally so the user doesn't have to worry about interrupting operations.
-  if( frame <= data->space + data->icon.width ) {
-
-    icon_t next_frame;
-    next_frame.width = 8;
-    for( uint8_t i = 0; i < SCREEN_HEIGHT; i++ ) {
-      // treat the 64 bit numbers like an 8 member uint8_t array
-      // shifts are 'backwards' because the MSB corresponds to the leftmost column and the LSB
-      // corresponds to the rightmost column
-      ((uint8_t*)&next_frame)[i] = 
-        ((uint8_t*)&cur_screen)[i] >> 1 |
-        ((uint8_t*)&data->icon)[i] << (SCREEN_WIDTH + data->space - frame);
-    }
-    update_screen(next_frame);
-
-  } else {
-    // we've finished the transition! Let the queue know we're done
-    queue_helper();
-  }
-}
-*/

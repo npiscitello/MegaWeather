@@ -9,10 +9,15 @@
 void app_main() {
 
   disp_driver_init(5);
+  //disp_set_icon(digit[3]);
+  disp_set_icon(character[EXCLAIM]);
+  //disp_set_icon(character[QUESTION]);
 
+  /*
   transition_t trans;
   trans.frame_delay = 75;
-  trans.instant = false;
+  //trans.instant = false;
+  trans.instant = true;
   trans.space = 2;
 
   trans.icon = digit[0];
@@ -36,4 +41,5 @@ void app_main() {
   disp_queue_append_single( &trans );
 
   disp_queue_start();
+  */
 }
