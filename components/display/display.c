@@ -37,7 +37,7 @@ SemaphoreHandle_t queue_mutex = NULL;
 TaskHandle_t queue_execute_task = NULL;
 
 // things we can tell the queue execution task to do
-enum queue_execute_cmds {
+enum queue_execute_index {
   QUEUE_CMD_NOP   = 0,
   QUEUE_CMD_START = 1,
   QUEUE_CMD_STOP  = 2
@@ -222,7 +222,6 @@ void disp_queue_execute(void* arg) {
 
         } else {
           // ...otherwise, do an animated update
-          // we specifically want this to be non-interruptable
           frame_num = 0;
           while( frame_num <= queue.ptr[queue.index].space + 
               queue.ptr[queue.index].icon.width) {
@@ -239,16 +238,20 @@ void disp_queue_execute(void* arg) {
             }
             disp_set_icon(next_frame);
             frame_num++;
+            // we specifically want this to be non-interruptable
             vTaskDelay(pdMS_TO_TICKS(queue.ptr[queue.index].frame_delay));
           }
         }
 
         cur_screen = next_frame;
+        vTaskDelay(pdMS_TO_TICKS(queue.ptr[queue.index].icon_delay * 10));
         queue.index++;
 
-        // should we stop? (this also implements the inter-icon wait)
-        xTaskNotifyWait(0, ULONG_MAX, &cmd, 
-            pdMS_TO_TICKS(queue.ptr[queue.index].icon_delay * 10));
+        // should we stop? Waiting before we check allows the user to call
+        // disp_queue_start during execution without interrupting timing. Using
+        // the indexed task notification functions would be better here, but the
+        // espressif SDK doesn't have them!
+        xTaskNotifyWait(0, ULONG_MAX, &cmd, 0);
         if( cmd == QUEUE_CMD_STOP || queue.index >= queue.length ) { 
           cmd = QUEUE_CMD_NOP;
           break; 
@@ -258,32 +261,6 @@ void disp_queue_execute(void* arg) {
     }
   }
 }
-
-/*
-// this is the actual transition "loop", which is really just a nonblocking timer function
-void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
-  transition_t *data = (transition_t *)tdata_raw;
-  frame++;
-  if( frame <= data->space + data->icon.width ) {
-
-    icon_t next_frame;
-    next_frame.width = 8;
-    for( uint8_t i = 0; i < SCREEN_HEIGHT; i++ ) {
-      // treat the 64 bit numbers like an 8 member uint8_t array
-      // shifts are 'backwards' because the MSB corresponds to the leftmost column and the LSB
-      // corresponds to the rightmost column
-      ((uint8_t*)&next_frame)[i] = 
-        ((uint8_t*)&cur_screen)[i] >> 1 |
-        ((uint8_t*)&data->icon)[i] << (SCREEN_WIDTH + data->space - frame);
-    }
-    update_screen(next_frame);
-
-  } else {
-    // we've finished the transition! Let the queue know we're done
-    queue_helper();
-  }
-}
-*/
 
 
 

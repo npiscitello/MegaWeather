@@ -2,6 +2,8 @@
 #include <stdbool.h>
 
 #include "esp_attr.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
 #include "display.h"
 #include "graphics.h"
@@ -11,11 +13,11 @@ void app_main() {
   disp_driver_init(5);
 
   transition_t trans;
-  trans.icon_delay = 25;
+  trans.icon_delay = 0;
   trans.frame_delay = 75;
-  //trans.instant = false;
-  trans.instant = true;
-  trans.space = 2;
+  trans.instant = false;
+  //trans.instant = true;
+  trans.space = 1;
 
   trans.icon = digit[0];
   disp_queue_append_single( &trans );
@@ -27,9 +29,10 @@ void app_main() {
   disp_queue_append_single( &trans );
 
   trans.icon = digit[3];
+  trans.icon_delay = 50;
   disp_queue_append_single( &trans );
 
-  trans.space = 3;
+  trans.space = 4;
   trans.icon = icon[FOG];
   disp_queue_append_single( &trans );
 
@@ -37,5 +40,8 @@ void app_main() {
   trans.icon = digit[5];
   disp_queue_append_single( &trans );
 
-  disp_queue_start();
+  while( true ) {
+    disp_queue_start();
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
 }
