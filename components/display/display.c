@@ -175,10 +175,12 @@ ret_code_t ICACHE_FLASH_ATTR spi_transmit(uint8_t addr, uint8_t data) {
 // update the whole screen in one shot
 // <TODO> catch any errors from spi_transmit
 ret_code_t ICACHE_FLASH_ATTR disp_set_icon( const icon_t image ) {
-  for( uint8_t i = 1; i <= image.width; i++ ) {
-    // this could probably be abstracted away a bit; for now, we know we're using uint64_t to
-    // simulate an 8 member uint8_t array, so we'll keep this magic number for now...
-    spi_transmit(i, (uint8_t)(image.icon >> ((i - 1) * 8)));
+  // each transmit sets a full row
+  for( uint8_t row = 0x01; row <= 0x08; row++ ) {
+    // this could probably be abstracted away a bit; for now, we know we're
+    // using uint64_t to simulate an 8 member uint8_t array, so we'll keep this
+    // magic number for now...
+    spi_transmit(row, (uint8_t)(image.icon >> ((row - 1) * 8)));
   }
   cur_screen = image;
   return RET_NO_ERR;
@@ -272,6 +274,9 @@ void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
 
 
 
+// for some reason, SPI won't work without a callback defined
+void spi_event_callback(int event, void *arg) {};
+
 // set up the screen and other variables for first use
 // <TODO> grab any errors from the SPI writes or memory allocations
 ret_code_t ICACHE_FLASH_ATTR disp_driver_init( const uint8_t queue_size ) {
@@ -292,11 +297,11 @@ ret_code_t ICACHE_FLASH_ATTR disp_driver_init( const uint8_t queue_size ) {
   spi_config_data.interface.bit_tx_order = 0;
   spi_config_data.interface.cpha = 0;
   spi_config_data.interface.cpol = 0;
-  // individual SPI events give us low level info we don't need
+  // for some reason, SPI won't work without a callback defined
   spi_config_data.intr_enable.val = 0;
+  spi_config_data.event_cb = spi_event_callback;
   spi_config_data.mode = SPI_MASTER_MODE;
-  // gotta go... fAST
-  spi_config_data.clk_div = SPI_10MHz_DIV;
+  spi_config_data.clk_div = SPI_2MHz_DIV;
 
   // use the external (not-flash) pins
   spi_init(HSPI_HOST, &spi_config_data);
@@ -315,17 +320,16 @@ ret_code_t ICACHE_FLASH_ATTR disp_driver_init( const uint8_t queue_size ) {
   spi_transmit(0x0b, 0x07);
   // turn off all pixels
   //disp_set_icon(character[BLANK]);
-  disp_set_icon(character[EXCLAIM]);
+  //disp_set_icon(character[EXCLAIM]);
+  disp_set_icon(character[QUESTION]);
   // take the chip out of shutdown
   spi_transmit(0x0C, 0x01);
 
-  /*
   // set up the write to display task and the execution queue mutex
   // <TODO> Should the stack be smaller? bigger?
   xTaskCreate(disp_queue_execute, "queue_execute", 1024, NULL,
       DISPLAY_PRIORITY, queue_execute_task);
   queue_mutex = xSemaphoreCreateMutex();
-  */
 
   return RET_NO_ERR;
 }

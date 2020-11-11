@@ -46,11 +46,6 @@ typedef enum {
 
 
 
-//<TODO> DEBUG
-ret_code_t disp_set_icon( const icon_t image );
-
-
-
 /* Sets up the display for use; results in a completely blank display at half
  * brightness. Also sets up memory for the transition queue.
  * queue_size: how many transitions the internal driver queue can store. This
