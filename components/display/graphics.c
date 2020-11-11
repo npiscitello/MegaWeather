@@ -30,14 +30,16 @@ const icon_t ICACHE_RODATA_ATTR digit[] =
   {0x0e11101e1111110e, 5}    // 9
 };
 
+// most of these will be used alone, not as part
+// of a string, so they are manually centered 
 const icon_t ICACHE_RODATA_ATTR character[] =
 {
   {0x00180018183c3c18, 8},   // !
   {0x001800183060663c, 8},   // ?
   {0x0000000000000000, 8},   // 
-  {0x001800183060663c, 8},   // .
+  {0x0000000303000000, 8},   // .
   {0x0000001b1b000000, 8},   // ..
   {0x000000dbdb000000, 8},   // ...
   {0x0000000f00000000, 4},   // -
-  {0x0000000000000303, 8}    // degrees
+  {0x0000000000000303, 2}    // degrees
 };
