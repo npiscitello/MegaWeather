@@ -12,7 +12,9 @@
 // Defines a transition from one image to another.
 typedef struct {
   icon_t icon;              // new icon to be shown
-  uint8_t frame_delay;      // how long to wait between frames, in ms.
+  uint8_t frame_delay;      // how long to wait between animation frames, in ms
+  uint8_t icon_delay;       // how long to wait until starting the next queued
+                            // transition, in 10s of ms (15 = 150ms delay)
   uint8_t space         :3; // cols of space between icons; for more than 7,
                             // use character[BLANK]
   uint8_t instant       :1; // setting this to true will disable the slide

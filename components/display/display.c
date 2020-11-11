@@ -11,6 +11,9 @@
 #include "display.h"
 #include "graphics.h"
 
+// <DEBUG>
+#define TAG "mw"
+
 // platform-specific
 #define ULONG_MAX 0xFFFFFFFF
 
@@ -215,14 +218,14 @@ void disp_queue_execute(void* arg) {
 
         } else {
           // ...otherwise, do an animated update
-          disp_set_icon(queue.ptr[queue.index].icon);
         }
 
         cur_screen = queue.ptr[queue.index].icon;
         queue.index++;
 
-        // should we stop?
-        xTaskNotifyWait(0, ULONG_MAX, &cmd, 0);
+        // should we stop? (this also implements the inter-frame wait)
+        xTaskNotifyWait(0, ULONG_MAX, &cmd, 
+            pdMS_TO_TICKS(queue.ptr[queue.index].icon_delay * 10));
         if( cmd == QUEUE_CMD_STOP || queue.index >= queue.length ) { 
           cmd = QUEUE_CMD_NOP;
           break; 
@@ -319,16 +322,15 @@ ret_code_t ICACHE_FLASH_ATTR disp_driver_init( const uint8_t queue_size ) {
   // scan across all digits
   spi_transmit(0x0b, 0x07);
   // turn off all pixels
-  //disp_set_icon(character[BLANK]);
-  //disp_set_icon(character[EXCLAIM]);
-  disp_set_icon(character[QUESTION]);
+  disp_set_icon(character[BLANK]);
   // take the chip out of shutdown
   spi_transmit(0x0C, 0x01);
 
   // set up the write to display task and the execution queue mutex
   // <TODO> Should the stack be smaller? bigger?
-  xTaskCreate(disp_queue_execute, "queue_execute", 1024, NULL,
-      DISPLAY_PRIORITY, queue_execute_task);
+  xTaskCreate(disp_queue_execute, "queue_execute", 2048, NULL,
+      DISPLAY_PRIORITY, &queue_execute_task);
+
   queue_mutex = xSemaphoreCreateMutex();
 
   return RET_NO_ERR;
