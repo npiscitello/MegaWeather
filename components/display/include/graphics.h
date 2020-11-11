@@ -5,7 +5,7 @@
 
 // the struct defining an icon
 struct icon_t {
-  uint64_t icon;      // the actual bitmap icon, max 8x8
+  uint64_t data;      // the actual bitmap icon, max 8x8
   uint8_t width;      // the number of columns required to fully display the icon
 };
 typedef struct icon_t icon_t;

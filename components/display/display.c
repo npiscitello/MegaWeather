@@ -183,7 +183,7 @@ ret_code_t ICACHE_FLASH_ATTR disp_set_icon( const icon_t image ) {
     // this could probably be abstracted away a bit; for now, we know we're
     // using uint64_t to simulate an 8 member uint8_t array, so we'll keep this
     // magic number for now...
-    spi_transmit(row, (uint8_t)(image.icon >> ((row - 1) * 8)));
+    spi_transmit(row, (uint8_t)(image.data >> ((row - 1) * 8)));
   }
   cur_screen = image;
   return RET_NO_ERR;
@@ -200,6 +200,9 @@ ret_code_t ICACHE_FLASH_ATTR disp_set_brightness( uint8_t brightness ) {
 
 // the task function that actually writes to the display
 void disp_queue_execute(void* arg) {
+  uint8_t frame_num = 0;
+  icon_t next_frame;
+  next_frame.width = 8;
   while(1) {
     uint32_t cmd;
     xTaskNotifyWait(0, ULONG_MAX, &cmd, portMAX_DELAY);
@@ -214,16 +217,36 @@ void disp_queue_execute(void* arg) {
         // the user to be able to interrupt a write mid-transition
         if( queue.ptr[queue.index].instant == true ) {
           // instant update, if requested...
-          disp_set_icon(queue.ptr[queue.index].icon);
+          next_frame = queue.ptr[queue.index].icon;
+          disp_set_icon(next_frame);
 
         } else {
           // ...otherwise, do an animated update
+          // we specifically want this to be non-interruptable
+          frame_num = 0;
+          while( frame_num <= queue.ptr[queue.index].space + 
+              queue.ptr[queue.index].icon.width) {
+            for( uint8_t row = 0; row < SCREEN_HEIGHT; row++ ) {
+              // treat the 64 bit number like an 8 member uint8_t array
+              // like in disp_set_icon, this only works because an icon is
+              // stored as a uint_64 behind the scenes.
+              // shifts are 'backwards' because the MSB corresponds to the
+              // leftmost column and the LSB corresponds to the rightmost column
+              ((uint8_t*)&(next_frame.data))[row] = 
+                ((uint8_t*)&(cur_screen.data))[row] >> 1 |
+                ((uint8_t*)&(queue.ptr[queue.index].icon.data))[row] << 
+                  (SCREEN_WIDTH + queue.ptr[queue.index].space - frame_num);
+            }
+            disp_set_icon(next_frame);
+            frame_num++;
+            vTaskDelay(pdMS_TO_TICKS(queue.ptr[queue.index].frame_delay));
+          }
         }
 
-        cur_screen = queue.ptr[queue.index].icon;
+        cur_screen = next_frame;
         queue.index++;
 
-        // should we stop? (this also implements the inter-frame wait)
+        // should we stop? (this also implements the inter-icon wait)
         xTaskNotifyWait(0, ULONG_MAX, &cmd, 
             pdMS_TO_TICKS(queue.ptr[queue.index].icon_delay * 10));
         if( cmd == QUEUE_CMD_STOP || queue.index >= queue.length ) { 
@@ -241,19 +264,6 @@ void disp_queue_execute(void* arg) {
 void ICACHE_FLASH_ATTR transition_loop( void* tdata_raw ) {
   transition_t *data = (transition_t *)tdata_raw;
   frame++;
-
-  // skip to the last frame if requested, artifically shifting cur_screen appropriately
-  if( data->instant == true && frame <= data->space + data->icon.width ) {
-    frame = data->space + data->icon.width;
-    for( uint8_t i = 0; i < SCREEN_HEIGHT; i++ ) {
-      ((uint8_t*)&cur_screen)[i] = ((uint8_t*)&cur_screen)[i] >> (data->space + data->icon.width - 1);
-    }
-  }
-
-  // Generate the next frame then push it to the display in one shot.
-  // This takes more time and memory, but it allows us to keep the cur_screen var updated.
-  // Basically, I'm striving for screen state changes to be as atomic as possible, in that the state
-  // is always known internally so the user doesn't have to worry about interrupting operations.
   if( frame <= data->space + data->icon.width ) {
 
     icon_t next_frame;

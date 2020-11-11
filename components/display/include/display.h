@@ -114,7 +114,8 @@ ret_code_t disp_queue_reset();
 /* Starts the queue execution. If the queue is already started, this has no
  * effect. Queue automatically stops and resets when it reaches the end. If
  * the queue is started while the current index is beyond the end of the queue,
- * the queue will start from the beginning.
+ * the queue will start from the beginning. You cannot write to the queue while
+ * it is executing.
  */
 ret_code_t disp_queue_start();
 

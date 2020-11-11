@@ -11,7 +11,8 @@ void app_main() {
   disp_driver_init(5);
 
   transition_t trans;
-  trans.icon_delay = 75;
+  trans.icon_delay = 25;
+  trans.frame_delay = 75;
   //trans.instant = false;
   trans.instant = true;
   trans.space = 2;
