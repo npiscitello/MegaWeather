@@ -184,6 +184,8 @@ ret_code_t ICACHE_FLASH_ATTR disp_set_icon( const icon_t image ) {
     // using uint64_t to simulate an 8 member uint8_t array, so we'll keep this
     // magic number for now...
     spi_transmit(row, (uint8_t)(image.data >> ((row - 1) * 8)));
+    // debug - spam display test mode
+    //spi_transmit(0x0F, 0xFF);
   }
   cur_screen = image;
   return RET_NO_ERR;

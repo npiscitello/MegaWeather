@@ -10,38 +10,23 @@
 
 void app_main() {
 
-  disp_driver_init(5);
+  disp_driver_init(9);
 
   transition_t trans;
   trans.icon_delay = 0;
-  trans.frame_delay = 75;
+  trans.icon_delay = 33;
+  trans.frame_delay = 100;
   trans.instant = false;
   //trans.instant = true;
   trans.space = 1;
 
-  trans.icon = digit[0];
-  disp_queue_append_single( &trans );
-
-  trans.icon = digit[1];
-  disp_queue_append_single( &trans );
-
-  trans.icon = digit[2];
-  disp_queue_append_single( &trans );
-
-  trans.icon = digit[3];
-  trans.icon_delay = 50;
-  disp_queue_append_single( &trans );
-
-  trans.space = 4;
-  trans.icon = icon[FOG];
-  disp_queue_append_single( &trans );
-
-  // this tests adding too many things to the queue
-  trans.icon = digit[5];
-  disp_queue_append_single( &trans );
+  for( uint8_t i = FIRST_ICON; i <= LAST_ICON; i++ ) {
+    trans.icon = icon[i];
+    disp_queue_append_single( &trans );
+  }
 
   while( true ) {
     disp_queue_start();
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
